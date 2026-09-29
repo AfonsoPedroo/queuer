@@ -1,0 +1,185 @@
+.palette-backdrop {
+  align-items: start;
+  backdrop-filter: blur(6px);
+  background: var(--surface-scrim-soft);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding-top: min(14vh, 120px);
+  position: fixed;
+  z-index: 100;
+}
+.palette {
+  animation: palette-in 150ms ease-out;
+  backdrop-filter: blur(20px);
+  background: var(--surface-dialog);
+  border: 1px solid var(--border-dialog);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--dialog-shadow);
+  max-height: min(620px, 72vh);
+  overflow: hidden;
+  width: min(640px, calc(100vw - 80px));
+}
+.palette__search {
+  align-items: center;
+  border-bottom: 1px solid var(--border-medium);
+  color: var(--accent);
+  display: grid;
+  gap: 11px;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  min-height: 59px;
+  padding: 0 17px;
+}
+.palette__search input {
+  background: transparent;
+  border: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: 0;
+  width: 100%;
+}
+.palette__search input::placeholder {
+  color: var(--text-quaternary);
+}
+.palette__search kbd,
+.palette__footer kbd,
+.palette-option > kbd {
+  background: var(--surface-glass);
+  border: 1px solid var(--border-medium);
+  border-radius: 4px;
+  color: var(--text-quaternary);
+  font-family: inherit;
+  font-size: 11px;
+  padding: 3px 5px;
+}
+.palette__spinner {
+  animation: spin 700ms linear infinite;
+  border: 2px solid rgb(255 255 255 / 12%);
+  border-radius: 50%;
+  border-top-color: var(--accent);
+  height: 15px;
+  width: 15px;
+}
+.palette__results {
+  max-height: calc(min(620px, 72vh) - 101px);
+  overflow: auto;
+  padding: 7px;
+}
+.palette__results > p {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  margin: 10px 9px 6px;
+}
+.palette__results > button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  min-height: 45px;
+  padding: 6px 9px;
+  text-align: left;
+  width: 100%;
+}
+.palette__results > button:hover,
+.palette__results > .palette-option--selected {
+  background: var(--surface-raised);
+}
+.palette-option__icon {
+  background: var(--surface-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  display: grid;
+  height: 32px;
+  place-items: center;
+  width: 32px;
+}
+.palette-option--selected .palette-option__icon {
+  background: color-mix(in srgb, var(--spotify-green) 12%, transparent);
+  color: var(--accent);
+}
+.palette-option__copy {
+  display: grid;
+  min-width: 0;
+}
+.palette-option__copy strong {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 620;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.palette-option__copy small {
+  color: var(--text-quaternary);
+  font-size: 11px;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.palette-option__action {
+  color: var(--text-quaternary);
+  display: grid;
+  padding: 6px;
+}
+.palette-option--selected .palette-option__action {
+  color: var(--accent);
+}
+.palette__empty {
+  align-items: center;
+  color: var(--text-quaternary);
+  display: flex;
+  flex-direction: column;
+  padding: 45px 20px;
+}
+.palette__empty strong {
+  color: var(--text-secondary);
+  font-size: 11px;
+  margin-top: 10px;
+}
+.palette__empty small {
+  font-size: 11px;
+  margin-top: 4px;
+}
+.palette__footer {
+  align-items: center;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-quaternary);
+  display: flex;
+  font-size: 11px;
+  gap: 13px;
+  min-height: 41px;
+  padding: 0 15px;
+}
+.palette__footer span {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+}
+.palette__source {
+  margin-left: auto;
+}
+
+@keyframes palette-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.985);
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .palette {
+    animation: none;
+  }
+}

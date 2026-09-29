@@ -1,0 +1,205 @@
+:host {
+  min-width: 0;
+}
+
+.player {
+  align-items: center;
+  background: var(--surface-1);
+  border-top: 1px solid var(--border-subtle);
+  display: grid;
+  gap: 28px;
+  grid-template-columns: minmax(240px, 0.9fr) minmax(420px, 1.4fr) minmax(260px, 0.9fr);
+  height: 80px;
+  padding: 0 20px;
+  position: relative;
+  z-index: 30;
+}
+
+.player__track {
+  align-items: center;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-width: 0;
+}
+.player__track-copy {
+  display: grid;
+  min-width: 0;
+}
+.player__track-copy strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.player__track-copy small {
+  color: var(--text-quaternary);
+  font-size: 11px;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.player__track-placeholder {
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-quaternary);
+  display: grid;
+  height: 52px;
+  place-items: center;
+  width: 52px;
+}
+
+.save-control,
+.transport-small,
+.play-control {
+  background: transparent;
+  border: 0;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: grid;
+  height: 30px;
+  place-items: center;
+  width: 30px;
+}
+
+.save-control:hover,
+.transport-small:hover,
+.play-control:hover {
+  color: var(--text-primary);
+}
+.save-control--active,
+.transport-small--active,
+.tool-active {
+  color: var(--accent);
+}
+.player__transport {
+  align-items: center;
+  display: grid;
+  gap: 7px;
+}
+.transport-controls {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+}
+.play-control {
+  border: 1px solid var(--border-medium);
+  border-radius: 50%;
+  color: var(--text-primary);
+  height: 34px;
+  width: 34px;
+}
+.play-control:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.progress-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 34px minmax(0, 1fr) 34px;
+}
+.progress-row time {
+  color: var(--text-quaternary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.range-track,
+.volume-range {
+  background: var(--border-medium);
+  display: block;
+  height: 3px;
+  position: relative;
+}
+.range-track > span,
+.volume-range > span {
+  background: var(--accent);
+  height: 100%;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+}
+.range-track input,
+.volume-range input {
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  height: 14px;
+  left: 0;
+  margin: -5px 0 0;
+  position: absolute;
+  top: 0;
+  width: 100%;
+}
+.range-track input::-webkit-slider-thumb,
+.volume-range input::-webkit-slider-thumb {
+  appearance: none;
+  background: var(--text-primary);
+  height: 8px;
+  opacity: 0;
+  width: 3px;
+}
+.range-track:hover input::-webkit-slider-thumb,
+.volume-range:hover input::-webkit-slider-thumb {
+  opacity: 1;
+}
+
+.player__tools {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.volume-range {
+  margin: 0 4px;
+  width: 74px;
+}
+.device-tool {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+  width: 30px;
+}
+.device-tool:hover {
+  color: var(--text-primary);
+}
+.spotify-attribution {
+  color: var(--text-quaternary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  margin-right: 3px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.spotify-attribution strong {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+@media (max-width: 1120px) {
+  .player {
+    gap: 14px;
+    grid-template-columns: minmax(180px, 0.8fr) minmax(330px, 1.4fr) minmax(150px, 0.7fr);
+  }
+  .spotify-attribution {
+    display: none;
+  }
+  .volume-range {
+    width: 52px;
+  }
+}

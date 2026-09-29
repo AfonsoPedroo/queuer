@@ -1,0 +1,27 @@
+@if (spotifyArtwork(); as imageArtwork) {
+  <img
+    class="artwork artwork--image"
+    [class.artwork--rounded]="rounded()"
+    [src]="imageArtwork.url"
+    [alt]="imageArtwork.alt"
+  />
+} @else if (demoArtwork(); as demo) {
+  <span
+    class="artwork artwork--demo"
+    [class.artwork--rounded]="rounded()"
+    [class]="demoClass()"
+    role="img"
+    [attr.aria-label]="'Fictional demo artwork ' + demo.monogram"
+  >
+    <span class="artwork__monogram" aria-hidden="true">{{ demo.monogram }}</span>
+  </span>
+} @else if (placeholderArtwork(); as placeholder) {
+  <span
+    class="artwork artwork--placeholder"
+    [class.artwork--rounded]="rounded()"
+    role="img"
+    [attr.aria-label]="placeholder.label"
+  >
+    <span aria-hidden="true">♪</span>
+  </span>
+}

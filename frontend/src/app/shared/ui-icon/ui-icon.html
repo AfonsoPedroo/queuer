@@ -1,0 +1,100 @@
+<svg
+  [attr.width]="size()"
+  [attr.height]="size()"
+  [attr.stroke-width]="strokeWidth()"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  aria-hidden="true"
+  focusable="false"
+>
+  @switch (name()) {
+    @case ('home') {
+      <path d="M3 10.8 12 3l9 7.8v9.1a1.1 1.1 0 0 1-1.1 1.1H4.1A1.1 1.1 0 0 1 3 19.9Z" />
+      <path d="M9.2 21v-7.2h5.6V21" />
+    }
+    @case ('search') {
+      <circle cx="10.8" cy="10.8" r="6.8" />
+      <path d="m16 16 4.2 4.2" />
+    }
+    @case ('heart') {
+      <path
+        d="M20.8 4.9a5.4 5.4 0 0 0-7.7 0L12 6l-1.1-1.1a5.4 5.4 0 0 0-7.7 7.7L12 21l8.8-8.4a5.4 5.4 0 0 0 0-7.7Z"
+      />
+    }
+    @case ('history') {
+      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+      <path d="M3 3v5h5M12 7v5l3 2" />
+    }
+    @case ('music') {
+      <path d="M9 18V5l11-2v13" />
+      <circle cx="6" cy="18" r="3" />
+      <circle cx="17" cy="16" r="3" />
+    }
+    @case ('plus') {
+      <path d="M12 5v14M5 12h14" />
+    }
+    @case ('chevron-down') {
+      <path d="m7 10 5 5 5-5" />
+    }
+    @case ('command') {
+      <path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3Z" />
+    }
+    @case ('copy') {
+      <rect x="8" y="8" width="11" height="11" rx="2" />
+      <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+    }
+    @case ('lock') {
+      <rect x="5" y="10" width="14" height="10" rx="2" />
+      <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2" />
+    }
+    @case ('play') {
+      <path d="m8 5 11 7-11 7Z" fill="currentColor" stroke="none" />
+    }
+    @case ('pause') {
+      <path d="M9 5v14M15 5v14" stroke-width="2.8" />
+    }
+    @case ('next') {
+      <path d="m6 5 10 7-10 7ZM18 5v14" />
+    }
+    @case ('previous') {
+      <path d="m18 5-10 7 10 7ZM6 5v14" />
+    }
+    @case ('shuffle') {
+      <path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
+    }
+    @case ('repeat') {
+      <path d="m17 2 4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3" />
+    }
+    @case ('repeat-one') {
+      <path d="m17 2 4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3" />
+      <path d="M12 10v5M10.5 11.5 12 10" />
+    }
+    @case ('volume') {
+      <path d="M11 5 6 9H3v6h3l5 4ZM15.5 9.3a4 4 0 0 1 0 5.4M18 6.5a8 8 0 0 1 0 11" />
+    }
+    @case ('volume-off') {
+      <path d="M11 5 6 9H3v6h3l5 4ZM16 9l5 5M21 9l-5 5" />
+    }
+    @case ('device') {
+      <rect x="3" y="4" width="14" height="10" rx="2" />
+      <path d="M8 20h4M10 14v6M20 8v10a2 2 0 0 1-2 2h-2" />
+    }
+    @case ('close') {
+      <path d="m6 6 12 12M18 6 6 18" />
+    }
+    @case ('check') {
+      <path d="m5 12 4 4L19 6" />
+    }
+    @case ('external') {
+      <path d="M14 4h6v6M20 4l-9 9" />
+      <path d="M18 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h6" />
+    }
+    @case ('warning') {
+      <path d="M10.3 4.1 2.6 18a2 2 0 0 0 1.8 3h15.2a2 2 0 0 0 1.8-3L13.7 4.1a2 2 0 0 0-3.4 0Z" />
+      <path d="M12 9v4M12 17h.01" />
+    }
+  }
+</svg>

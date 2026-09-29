@@ -1,0 +1,151 @@
+<main class="music-home" aria-labelledby="page-title">
+  <header class="page-header">
+    <div>
+      <h1 id="page-title">{{ isHome() ? 'Home' : store.collectionTitle() }}</h1>
+      <p>
+        @if (isHome()) {
+          Playlists, recent tracks and saved music.
+        } @else {
+          {{ store.collectionDescription() }}
+        }
+      </p>
+    </div>
+    @if (integration.mode() === 'demo') {
+      <span><strong>Demo mode.</strong> Fictional music.</span>
+    }
+  </header>
+
+  @if (isHome()) {
+    <section class="shelf" aria-labelledby="playlists-title">
+      <header class="section-heading">
+        <h2 id="playlists-title">Your playlists</h2>
+        <div class="playlist-tools">
+          <span class="playlist-tools__count">{{ store.playlists().length }} playlists</span>
+          @if (store.playlists().length > 1) {
+            <label class="playlist-sort">
+              <span class="visually-hidden">Sort playlists</span>
+              <select
+                aria-label="Sort playlists"
+                [value]="playlistSort()"
+                (change)="updatePlaylistSort($event)"
+              >
+                <option value="spotify">Spotify order</option>
+                <option value="name">A–Z</option>
+                <option value="tracks">Most tracks</option>
+              </select>
+              <app-icon name="chevron-down" [size]="13" />
+            </label>
+          }
+          @if (store.playlists().length > 6) {
+            <button
+              class="playlist-toggle"
+              type="button"
+              [attr.aria-expanded]="playlistsExpanded()"
+              aria-controls="playlist-grid"
+              (click)="togglePlaylistsExpanded()"
+            >
+              {{ playlistsExpanded() ? 'Show less' : 'Show all' }}
+              <app-icon
+                name="chevron-down"
+                [size]="13"
+                [class.playlist-toggle__icon--expanded]="playlistsExpanded()"
+              />
+            </button>
+          }
+        </div>
+      </header>
+
+      <div class="playlist-grid" id="playlist-grid">
+        @for (playlist of visiblePlaylists(); track playlist.id) {
+          <button class="playlist-card" type="button" (click)="openCollection(playlist.id)">
+            <app-artwork [artwork]="playlist.artwork" [size]="168" />
+            <span>
+              <strong>{{ playlist.name }}</strong>
+              <small>{{ playlist.trackCount }} tracks</small>
+            </span>
+          </button>
+        }
+      </div>
+    </section>
+
+    <div class="home-columns">
+      <section class="track-section" aria-labelledby="tracks-title">
+        <header class="section-heading">
+          <h2 id="tracks-title">Tracks</h2>
+        </header>
+
+        <div class="track-list">
+          @for (track of homeTracks(); track track.id) {
+            <button class="track-row" type="button" (click)="play(track)">
+              <app-artwork [artwork]="track.artwork" [size]="48" />
+              <span
+                ><strong>{{ track.title }}</strong
+                ><small>{{ track.artist }}</small></span
+              >
+              <span class="track-row__album">{{ track.album }}</span>
+              <time>{{ formatDuration(track.durationSeconds) }}</time>
+            </button>
+          }
+        </div>
+      </section>
+
+      <section class="track-section" aria-labelledby="shortcuts-title">
+        <header class="section-heading">
+          <h2 id="shortcuts-title">Shortcuts</h2>
+        </header>
+
+        <div class="shortcut-list">
+          <button type="button" (click)="openCollection('liked')">
+            <span class="shortcut-list__icon"><app-icon name="heart" [size]="17" /></span>
+            <span
+              ><strong>Liked Songs</strong><small>{{ likedCount() }} tracks</small></span
+            >
+          </button>
+          <button type="button" (click)="openCollection('recent')">
+            <span class="shortcut-list__icon"><app-icon name="history" [size]="17" /></span>
+            <span><strong>Recently Played</strong><small>Listening history</small></span>
+          </button>
+        </div>
+      </section>
+    </div>
+  } @else {
+    <section class="collection" aria-label="Collection tracks">
+      <div class="collection__head">
+        <span>Track</span>
+        <span>Album</span>
+        <span>Time</span>
+      </div>
+
+      <div class="collection__tracks">
+        @for (track of store.filteredTracks(); track track.id) {
+          <div class="collection-row">
+            <button class="track-row__identity" type="button" (click)="play(track)">
+              <app-artwork [artwork]="track.artwork" [size]="48" />
+              <span
+                ><strong>{{ track.title }}</strong
+                ><small>{{ track.artist }}</small></span
+              >
+            </button>
+            <span>{{ track.album }}</span>
+            <time>{{ formatDuration(track.durationSeconds) }}</time>
+            <button
+              class="save-button"
+              type="button"
+              [class.save-button--active]="track.liked"
+              [attr.aria-label]="track.liked ? 'Remove from saved tracks' : 'Save track'"
+              (click)="toggleSaved(track)"
+            >
+              {{ track.liked ? '✓' : '+' }}
+            </button>
+          </div>
+        } @empty {
+          <p class="empty-state">No tracks match this view.</p>
+        }
+      </div>
+    </section>
+  }
+
+  @if (integration.syncing()) {
+    <div class="sync-overlay" aria-live="polite"><span></span> Loading Spotify data…</div>
+  }
+</main>

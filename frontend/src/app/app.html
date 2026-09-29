@@ -1,0 +1,57 @@
+<main class="app-shell">
+  <header class="titlebar" data-tauri-drag-region (dblclick)="toggleMaximize()">
+    <span class="titlebar__name" data-tauri-drag-region>Queuer</span>
+    <div class="titlebar__controls">
+      <button type="button" aria-label="Minimize window" (click)="minimizeWindow()">
+        <span class="window-control window-control--minimize"></span>
+      </button>
+      <button type="button" aria-label="Maximize window" (click)="toggleMaximize()">
+        <span class="window-control window-control--maximize"></span>
+      </button>
+      <button
+        class="titlebar__close"
+        type="button"
+        aria-label="Close window"
+        (click)="closeWindow()"
+      >
+        <app-icon name="close" [size]="14" />
+      </button>
+    </div>
+  </header>
+
+  <app-topbar class="app-shell__topbar" (openAccount)="accountOpen.set(true)" />
+
+  <section class="app-shell__workspace">
+    <app-home-view />
+  </section>
+
+  <app-player-bar class="app-shell__player" />
+</main>
+
+<app-command-palette (openAccount)="accountOpen.set(true)" />
+
+@if (accountOpen()) {
+  <app-auth-panel (closed)="accountOpen.set(false)" (connected)="handleConnected()" />
+}
+
+@if (store.toast(); as toast) {
+  <section
+    class="toast"
+    [class.toast--error]="toast.tone === 'error'"
+    [attr.role]="toast.tone === 'error' ? 'alert' : 'status'"
+    [attr.aria-live]="toast.tone === 'error' ? 'assertive' : 'polite'"
+  >
+    <span class="toast__icon" aria-hidden="true"
+      ><app-icon [name]="toast.tone === 'error' ? 'warning' : 'check'" [size]="15"
+    /></span>
+    <span class="toast__copy">
+      <strong>{{ toast.title }}</strong>
+      @if (toast.detail) {
+        <small>{{ toast.detail }}</small>
+      }
+    </span>
+    <button type="button" aria-label="Dismiss notification" (click)="store.dismissToast()">
+      <app-icon name="close" [size]="15" />
+    </button>
+  </section>
+}

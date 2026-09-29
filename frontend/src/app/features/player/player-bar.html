@@ -1,0 +1,128 @@
+<footer class="player" aria-label="Player controls">
+  <section class="player__track">
+    @if (store.currentTrack(); as track) {
+      <app-artwork [artwork]="track.artwork" [size]="52" />
+      <span class="player__track-copy">
+        <strong>{{ track.title }}</strong>
+        <small>{{ track.artist }}</small>
+      </span>
+      <button
+        class="save-control"
+        type="button"
+        [class.save-control--active]="track.liked"
+        [attr.aria-label]="track.liked ? 'Remove from saved tracks' : 'Save track'"
+        (click)="integration.toggleSaved(track)"
+      >
+        <app-icon [name]="track.liked ? 'check' : 'plus'" [size]="15" />
+      </button>
+    } @else {
+      <span class="player__track-placeholder"><app-icon name="music" [size]="20" /></span>
+      <span class="player__track-copy"
+        ><strong>Nothing playing</strong><small>Choose a track or an active device</small></span
+      >
+    }
+  </section>
+
+  <section class="player__transport">
+    <div class="transport-controls">
+      <button
+        class="transport-small"
+        type="button"
+        aria-label="Toggle shuffle"
+        [class.transport-small--active]="store.shuffleEnabled()"
+        [attr.aria-pressed]="store.shuffleEnabled()"
+        (click)="integration.toggleShuffle()"
+      >
+        <app-icon name="shuffle" [size]="15" />
+      </button>
+      <button
+        class="transport-small"
+        type="button"
+        aria-label="Previous track"
+        (click)="integration.previous()"
+      >
+        <app-icon name="previous" [size]="17" />
+      </button>
+      <button
+        class="play-control"
+        type="button"
+        [attr.aria-label]="store.isPlaying() ? 'Pause' : 'Play'"
+        [disabled]="!store.currentTrack()"
+        (click)="integration.togglePlayback()"
+      >
+        <app-icon [name]="store.isPlaying() ? 'pause' : 'play'" [size]="18" [strokeWidth]="2.1" />
+      </button>
+      <button
+        class="transport-small"
+        type="button"
+        aria-label="Next track"
+        (click)="integration.next()"
+      >
+        <app-icon name="next" [size]="17" />
+      </button>
+      <button
+        class="transport-small"
+        type="button"
+        [class.transport-small--active]="store.repeatMode() !== 'off'"
+        [attr.aria-label]="'Repeat mode: ' + store.repeatMode()"
+        (click)="integration.cycleRepeat()"
+      >
+        <app-icon [name]="store.repeatMode() === 'one' ? 'repeat-one' : 'repeat'" [size]="15" />
+      </button>
+    </div>
+
+    <div class="progress-row">
+      <time>{{ formatTime(store.progressSeconds()) }}</time>
+      <label class="range-track">
+        <span [style.width.%]="store.currentProgressPercent()"></span>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          step="0.1"
+          [value]="store.currentProgressPercent()"
+          [disabled]="!store.currentTrack()"
+          aria-label="Playback position"
+          (input)="seek($event)"
+        />
+      </label>
+      <time>{{ formatTime(store.currentTrack()?.durationSeconds ?? 0) }}</time>
+    </div>
+  </section>
+
+  <section class="player__tools">
+    @if (integration.mode() === 'spotify') {
+      <span class="spotify-attribution" title="Music metadata and artwork provided by Spotify"
+        >from <strong>Spotify</strong></span
+      >
+    }
+    <button
+      class="icon-button icon-button--compact"
+      type="button"
+      [attr.aria-label]="store.volume() === 0 ? 'Unmute' : 'Mute'"
+      (click)="integration.toggleMute()"
+    >
+      <app-icon [name]="store.volume() === 0 ? 'volume-off' : 'volume'" [size]="17" />
+    </button>
+    <label class="volume-range">
+      <span [style.width.%]="store.volume()"></span>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        [value]="store.volume()"
+        aria-label="Volume"
+        (input)="setVolume($event)"
+      />
+    </label>
+    <button
+      class="device-tool"
+      type="button"
+      [attr.aria-label]="store.activeDevice()?.name ?? 'Playback device'"
+      [title]="store.activeDevice()?.name ?? 'Playback device'"
+      (click)="store.showToast(store.activeDevice()?.name ?? 'No active Spotify device')"
+    >
+      <app-icon name="device" [size]="16" />
+    </button>
+  </section>
+</footer>

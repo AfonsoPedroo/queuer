@@ -1,0 +1,80 @@
+:host {
+  display: inline-grid;
+  flex: 0 0 auto;
+  height: var(--artwork-size);
+  width: var(--artwork-size);
+}
+
+.artwork {
+  display: grid;
+  height: 100%;
+  overflow: hidden;
+  place-items: center;
+  width: 100%;
+}
+
+.artwork--rounded {
+  border-radius: var(--radius-sm);
+}
+
+.artwork--image {
+  background: #171818;
+  object-fit: contain;
+}
+
+.artwork--placeholder {
+  background: #202222;
+  border: 1px solid #303232;
+  color: var(--text-quaternary);
+  font-size: calc(var(--artwork-size) * 0.32);
+}
+
+.artwork--demo {
+  border: 0;
+  color: rgb(255 255 255 / 88%);
+}
+
+.artwork__monogram {
+  font-size: calc(var(--artwork-size) * 0.23);
+  font-weight: 700;
+}
+
+.artwork--aurora {
+  background: #24724b;
+}
+
+.artwork--cinder {
+  background: #934127;
+}
+
+.artwork--dusk {
+  background: #4d477f;
+}
+
+.artwork--forest {
+  background: #3f624d;
+}
+
+.artwork--glacier {
+  background: #356879;
+}
+
+.artwork--halo {
+  background: #77664c;
+}
+
+.artwork--lagoon {
+  background: #287779;
+}
+
+.artwork--orchid {
+  background: #76466f;
+}
+
+.artwork--solar {
+  background: #8c652e;
+}
+
+.artwork--velvet {
+  background: #704052;
+}

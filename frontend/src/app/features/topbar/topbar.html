@@ -1,0 +1,105 @@
+<header class="topbar">
+  <div class="wordmark" aria-label="Queuer home">
+    <span class="wordmark__mark" aria-hidden="true"></span>
+    <strong>Queuer</strong>
+  </div>
+
+  <nav class="primary-modes" aria-label="Workspace views">
+    <button
+      type="button"
+      class="primary-modes__item"
+      [class.primary-modes__item--active]="store.activeCollection() === 'home'"
+      (click)="openCollection('home')"
+    >
+      Home
+    </button>
+    <button
+      type="button"
+      class="primary-modes__item"
+      [class.primary-modes__item--active]="store.activeCollection() === 'recent'"
+      (click)="openCollection('recent')"
+    >
+      History
+    </button>
+  </nav>
+
+  <label class="search-box">
+    <span class="sr-only">Filter the current tracks</span>
+    <input
+      #trackSearch
+      type="search"
+      autocomplete="off"
+      spellcheck="false"
+      placeholder="Go to album, artist, playlist…"
+      [value]="store.query()"
+      (input)="updateQuery($event)"
+    />
+    @if (store.query()) {
+      <button type="button" aria-label="Clear search" (click)="clearQuery()">
+        <app-icon name="close" [size]="13" />
+      </button>
+    } @else {
+      <kbd>⌘K</kbd>
+    }
+  </label>
+
+  <div class="topbar__actions">
+    <span class="source-mode">{{ integration.mode() === 'spotify' ? 'Spotify' : 'Local' }}</span>
+    <div class="device-control">
+      <button
+        class="device-button"
+        type="button"
+        [attr.aria-expanded]="deviceMenuOpen()"
+        [attr.aria-label]="store.activeDevice()?.name ?? 'Choose playback device'"
+        [title]="store.activeDevice()?.name ?? 'Choose playback device'"
+        aria-haspopup="menu"
+        (click)="deviceMenuOpen.update((open) => !open)"
+      >
+        <app-icon name="device" [size]="16" />
+      </button>
+      @if (deviceMenuOpen()) {
+        <div class="device-menu" role="menu">
+          <p>Spotify Connect</p>
+          @if (store.devices().length === 0) {
+            <div class="device-menu__empty">
+              <strong>No devices found</strong
+              ><small>Open Spotify on a phone, speaker, or computer.</small>
+            </div>
+          } @else {
+            @for (device of store.devices(); track device.id) {
+              <button
+                type="button"
+                role="menuitem"
+                [disabled]="device.isRestricted"
+                [class.device-menu__item--active]="device.isActive"
+                (click)="chooseDevice(device.id)"
+              >
+                <app-icon name="device" [size]="15" />
+                <span
+                  ><strong>{{ device.name }}</strong
+                  ><small>{{ device.type }}</small></span
+                >
+                @if (device.isActive) {
+                  <app-icon name="check" [size]="14" />
+                }
+              </button>
+            }
+          }
+        </div>
+      }
+    </div>
+    <button class="account-button" type="button" (click)="openAccount.emit()">
+      <span class="account-button__copy"
+        ><strong>{{ store.profile()?.displayName ?? 'Demo' }}</strong
+        ><small>{{ integration.mode() === 'spotify' ? 'connected' : 'offline' }}</small></span
+      >
+      <span class="avatar avatar--small">
+        @if (store.profile()?.imageUrl; as imageUrl) {
+          <img [src]="imageUrl" alt="" />
+        } @else {
+          {{ profileInitial() }}
+        }
+      </span>
+    </button>
+  </div>
+</header>

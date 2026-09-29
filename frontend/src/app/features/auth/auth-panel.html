@@ -1,0 +1,157 @@
+<div class="auth-backdrop" (mousedown)="closed.emit()">
+  <section
+    class="auth-panel"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="auth-title"
+    (mousedown)="$event.stopPropagation()"
+  >
+    <header>
+      <div class="auth-panel__icon"><app-icon name="lock" [size]="20" /></div>
+      <div>
+        <h2 id="auth-title">Spotify connection</h2>
+      </div>
+      <button class="icon-button" type="button" aria-label="Close" (click)="closed.emit()">
+        <app-icon name="close" [size]="17" />
+      </button>
+    </header>
+
+    @if (!auth.isDesktop()) {
+      <div class="auth-message auth-message--warning">
+        <app-icon name="device" [size]="18" />
+        <div>
+          <strong>Desktop application required</strong>
+          <p>
+            This authentication flow intentionally runs only inside Tauri, where the refresh token
+            can use the operating-system credential vault.
+          </p>
+        </div>
+      </div>
+    } @else if (auth.authenticated()) {
+      <div class="connected-account">
+        <span class="connected-account__avatar">
+          @if (auth.profile()?.images?.[0]?.url; as imageUrl) {
+            <img [src]="imageUrl" alt="" />
+          } @else {
+            {{ auth.displayName().charAt(0).toUpperCase() }}
+          }
+        </span>
+        <div>
+          <span>Connected</span><strong>{{ auth.displayName() }}</strong
+          ><small>Access token in memory · refresh token in Windows Credential Manager</small>
+        </div>
+        <i></i>
+      </div>
+
+      <dl class="session-details">
+        <div>
+          <dt>Status</dt>
+          <dd>{{ phaseLabel() }}</dd>
+        </div>
+        <div>
+          <dt>Permissions</dt>
+          <dd>{{ auth.status().scopes.length }} scoped capabilities</dd>
+        </div>
+        <div>
+          <dt>Token storage</dt>
+          <dd>Native OS vault</dd>
+        </div>
+      </dl>
+
+      <section class="playback-spike">
+        <div class="playback-spike__heading">
+          <span><app-icon name="device" [size]="15" /> Playback in Queuer</span>
+          <em [class.playback-spike__status--ready]="playbackSdk.phase() === 'ready'">{{
+            playbackSdk.phase()
+          }}</em>
+        </div>
+        <p>{{ playbackSdk.message() }}</p>
+        <div>
+          <button
+            type="button"
+            [disabled]="playbackSdk.phase() === 'loading' || playbackSdk.phase() === 'connecting'"
+            (click)="playbackSdk.runCompatibilityTest()"
+          >
+            {{ playbackSdk.phase() === 'idle' ? 'Enable playback in Queuer' : 'Initialize again' }}
+          </button>
+          @if (playbackSdk.phase() === 'ready') {
+            <button
+              class="playback-spike__transfer"
+              type="button"
+              (click)="playbackSdk.transferPlaybackHere()"
+            >
+              Use Queuer for playback
+            </button>
+          }
+        </div>
+      </section>
+
+      <button class="danger-action" type="button" [disabled]="auth.busy()" (click)="disconnect()">
+        Sign out and remove saved Spotify session
+      </button>
+    } @else {
+      <div class="setup-copy">
+        <h3>One-time application setup</h3>
+        <p>
+          Create a Spotify Development Mode app, add yourself and your friends to its allowlist,
+          then paste its public Client ID. Never paste a Client Secret here.
+        </p>
+      </div>
+
+      <label class="field">
+        <span>Spotify Client ID</span>
+        <input
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="Paste the public Client ID"
+          [value]="clientIdInput()"
+          [disabled]="auth.busy()"
+          (input)="updateClientId($event)"
+        />
+        <small>Safe to embed in a desktop build; it is an identifier, not a secret.</small>
+      </label>
+
+      <div class="redirect-field">
+        <span>Redirect URI</span>
+        <code>{{ auth.status().redirectUriRegistration }}</code>
+        <button type="button" (click)="copyRedirect()">
+          <app-icon [name]="copied() ? 'check' : 'copy'" [size]="14" />
+          {{ copied() ? 'Copied' : 'Copy' }}
+        </button>
+        <small
+          >Queuer listens on this fixed loopback port only while sign-in is in progress. The address
+          never leaves your computer.</small
+        >
+      </div>
+
+      @if (auth.error(); as error) {
+        <div class="auth-error" role="alert">
+          <app-icon name="warning" [size]="17" /><span
+            ><strong>{{ error.message }}</strong
+            ><small>Error code: {{ error.code }}</small></span
+          >
+        </div>
+      }
+
+      <button
+        class="connect-action"
+        type="button"
+        [disabled]="auth.busy() || clientIdInput().trim().length < 16"
+        (click)="connect()"
+      >
+        @if (auth.busy()) {
+          <span class="button-spinner"></span> {{ phaseLabel() }}
+        } @else {
+          <app-icon name="external" [size]="16" /> Continue in system browser
+        }
+      </button>
+
+      @if (auth.status().phase === 'authorizing' || auth.status().phase === 'exchangingCode') {
+        <button class="cancel-action" type="button" (click)="auth.cancelLogin()">
+          Cancel sign-in
+        </button>
+      }
+    }
+  </section>
+</div>

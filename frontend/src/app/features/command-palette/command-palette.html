@@ -1,0 +1,100 @@
+@if (store.commandOpen()) {
+  <div class="palette-backdrop" (mousedown)="store.closeCommandPalette()">
+    <section
+      class="palette"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="palette-title"
+      (mousedown)="$event.stopPropagation()"
+    >
+      <h2 id="palette-title" class="sr-only">Command palette</h2>
+      <label class="palette__search">
+        <app-icon name="command" [size]="19" />
+        <input
+          #paletteInput
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="Run a command or search music…"
+          [value]="store.commandQuery()"
+          aria-controls="command-results"
+          [attr.aria-activedescendant]="'palette-option-' + selectedIndex()"
+          (input)="updateQuery($event)"
+          (keydown)="handleKeydown($event)"
+        />
+        @if (integration.searching()) {
+          <span class="palette__spinner" aria-label="Searching Spotify"></span>
+        }
+        <kbd>ESC</kbd>
+      </label>
+
+      <div id="command-results" class="palette__results" role="listbox">
+        @if (visibleCommands().length > 0) {
+          <p>Commands</p>
+          @for (command of visibleCommands(); track command.id; let index = $index) {
+            <button
+              [id]="'palette-option-' + index"
+              type="button"
+              role="option"
+              [attr.aria-selected]="selectedIndex() === index"
+              [class.palette-option--selected]="selectedIndex() === index"
+              (mouseenter)="selectedIndex.set(index)"
+              (click)="runCommand(command)"
+            >
+              <span class="palette-option__icon"
+                ><app-icon [name]="command.icon" [size]="16"
+              /></span>
+              <span class="palette-option__copy"
+                ><strong>{{ command.label }}</strong
+                ><small>{{ command.hint }}</small></span
+              >
+              @if (command.shortcut) {
+                <kbd>{{ command.shortcut }}</kbd>
+              }
+            </button>
+          }
+        }
+
+        @if (visibleTracks().length > 0) {
+          <p>{{ integration.mode() === 'spotify' ? 'Music' : 'Demo tracks' }}</p>
+          @for (track of visibleTracks(); track track.id; let trackIndex = $index) {
+            @let optionIndex = visibleCommands().length + trackIndex;
+            <button
+              [id]="'palette-option-' + optionIndex"
+              type="button"
+              role="option"
+              [attr.aria-selected]="selectedIndex() === optionIndex"
+              [class.palette-option--selected]="selectedIndex() === optionIndex"
+              (mouseenter)="selectedIndex.set(optionIndex)"
+              (click)="playTrack(track)"
+            >
+              <app-artwork [artwork]="track.artwork" [size]="32" />
+              <span class="palette-option__copy"
+                ><strong>{{ track.title }}</strong
+                ><small>{{ track.artist }} · {{ track.album }}</small></span
+              >
+              <span class="palette-option__action"><app-icon name="play" [size]="14" /></span>
+            </button>
+          }
+        }
+
+        @if (
+          visibleCommands().length === 0 && visibleTracks().length === 0 && !integration.searching()
+        ) {
+          <div class="palette__empty">
+            <app-icon name="search" [size]="20" /><strong>No results</strong
+            ><small>Try a track, artist, album, or command.</small>
+          </div>
+        }
+      </div>
+
+      <footer class="palette__footer">
+        <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
+        <span><kbd>↵</kbd> Open</span>
+        <span class="palette__source">{{
+          integration.mode() === 'spotify' ? 'Spotify' : 'Demo'
+        }}</span>
+      </footer>
+    </section>
+  </div>
+}

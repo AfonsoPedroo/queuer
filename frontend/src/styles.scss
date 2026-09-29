@@ -1,0 +1,185 @@
+:root {
+  color-scheme: dark;
+  --accent: #e56b49;
+  --accent-hover: #ef7b59;
+  --accent-muted: #b75c43;
+  --spotify-green: #1ed760;
+  --text-on-accent: #051308;
+  --danger: #ff6269;
+  --warning: #c9902d;
+  --surface-0: #0d0d0b;
+  --surface-1: #11110f;
+  --surface-2: #171714;
+  --surface-3: #1d1d19;
+  --surface-raised: #22221e;
+  --surface-hover: #191916;
+  --surface-active: #20201c;
+  --surface-dialog: rgb(31 32 32 / 97%);
+  --surface-scrim: rgb(0 0 0 / 62%);
+  --surface-scrim-soft: rgb(0 0 0 / 58%);
+  --surface-glass: rgb(255 255 255 / 5%);
+  --border-subtle: #262622;
+  --border-medium: #373731;
+  --border-dialog: #464848;
+  --text-primary: #efeee7;
+  --text-secondary: #d0cfc7;
+  --text-tertiary: #96958d;
+  --text-quaternary: #696860;
+  --status-error-bg: rgb(255 107 113 / 9%);
+  --status-error-border: rgb(255 107 113 / 17%);
+  --status-error-text: #ff979b;
+  --status-warning-bg: rgb(233 185 95 / 7%);
+  --status-warning-border: rgb(233 185 95 / 17%);
+  --status-warning-text: #f2d9a9;
+  --dialog-shadow: 0 24px 70px rgb(0 0 0 / 62%);
+  --focus-ring: 0 0 0 1px #0d0d0b, 0 0 0 3px #e56b49;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --font-sans: 'IBM Plex Sans', 'Aptos', 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  margin: 0;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  box-shadow: var(--focus-ring);
+  outline: 0;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+::selection {
+  background: rgb(255 92 53 / 32%);
+  color: #fff;
+}
+
+::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3d3c36;
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #505251;
+  background-clip: padding-box;
+  border: 3px solid transparent;
+}
+
+.icon-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  transition:
+    background 100ms ease,
+    color 100ms ease;
+  width: 32px;
+}
+
+.icon-button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.icon-button--compact {
+  height: 28px;
+  width: 28px;
+}
+
+.avatar {
+  align-items: center;
+  background: #24231f;
+  border: 1px solid var(--border-medium);
+  border-radius: 50%;
+  color: #f0fff5;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 650;
+  height: 32px;
+  justify-content: center;
+  overflow: hidden;
+  width: 32px;
+}
+
+.avatar--small {
+  font-size: 11px;
+  height: 28px;
+  width: 28px;
+}
+
+.avatar img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.sr-only {
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

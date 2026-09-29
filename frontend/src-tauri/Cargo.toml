@@ -1,0 +1,31 @@
+[package]
+name = "queuer"
+version = "0.1.4"
+description = "Desktop power-user music workflow client"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "queuer_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+base64 = "0.22"
+getrandom = "0.3"
+keyring = { version = "4.2", default-features = false, features = ["v1"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+sha2 = "0.10"
+subtle = "2.6"
+thiserror = "2"
+tokio = { version = "1", features = ["io-util", "macros", "net", "sync", "time"] }
+url = "2.5"
+webbrowser = "1"
+zeroize = { version = "1.8", features = ["derive", "serde"] }
+log = "0.4"
+tauri = { version = "2.11.6", features = [] }
+tauri-plugin-log = "2"
