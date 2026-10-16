@@ -2,6 +2,8 @@ import { Injectable } from '@angular/core';
 import { SpotifyAuthService } from '../auth/spotify-auth.service';
 import {
   SpotifyDevicesDto,
+  SpotifyAlbumTracksPageDto,
+  SpotifyAlbumsPageDto,
   SpotifyPlaybackStateDto,
   SpotifyPlaylistItemsPageDto,
   SpotifyPlaylistsPageDto,
@@ -9,11 +11,17 @@ import {
   SpotifyRecentlyPlayedDto,
   SpotifySavedTracksPageDto,
   SpotifySearchDto,
+  SpotifyTopItemsPageDto,
+  SpotifyTopTracksPageDto,
+  SpotifyPlaylistDto,
 } from './spotify-api.models';
 
 const API_BASE_URL = 'https://api.spotify.com/v1';
+const MAX_SEARCH_LIMIT = 10;
+const MAX_SHORT_WAIT_SECONDS = 10;
+const COOLDOWN_STEPS_SECONDS = [30, 300, 1800];
 export const NO_PLAYBACK_DEVICE_MESSAGE =
-  'No Spotify playback device is available. Open Spotify on this computer or phone, start any track once, and try again.';
+  'Não há nenhum dispositivo Spotify disponível. Abre o Spotify neste computador ou telemóvel, inicia uma música e tenta novamente.';
 
 interface RequestOptions {
   readonly method?: string;
@@ -29,6 +37,7 @@ export type SpotifyApiErrorCode =
   | 'development_quota_exceeded'
   | 'playback_restricted'
   | 'rate_limited'
+  | 'search_budget_exhausted'
   | 'no_active_device'
   | 'spotify_unavailable'
   | 'network_unavailable'
@@ -56,7 +65,7 @@ export function classifySpotifyHttpError(
   if (status === 401) {
     return new SpotifyApiError(
       'authentication_required',
-      'Spotify requires you to sign in again.',
+      'O Spotify precisa que voltes a iniciar sessão.',
       status,
     );
   }
@@ -68,7 +77,7 @@ export function classifySpotifyHttpError(
     if (reason.includes('premium')) {
       return new SpotifyApiError(
         'premium_required',
-        'Spotify playback control requires Premium on the signed-in account.',
+        'O controlo de reprodução requer Spotify Premium.',
         status,
       );
     }
@@ -79,34 +88,34 @@ export function classifySpotifyHttpError(
     ) {
       return new SpotifyApiError(
         'account_not_allowlisted',
-        'This account is not allowed to use the Spotify Development Mode app. Add it under Users Management in the developer dashboard.',
+        'Esta conta não tem acesso à aplicação em Development Mode. Adiciona-a em Users Management no painel do Spotify.',
         status,
       );
     }
     if (reason.includes('quota')) {
       return new SpotifyApiError(
         'development_quota_exceeded',
-        'This Spotify Development Mode app has reached its request quota. Wait before trying again.',
+        'A aplicação atingiu o limite temporário de pedidos do Spotify. Tenta novamente mais tarde.',
         status,
       );
     }
     if (reason.includes('scope') || reason.includes('permission')) {
       return new SpotifyApiError(
         'permission_missing',
-        'This login is missing a Spotify permission required for that action. Sign out and connect again.',
+        'Falta uma permissão necessária. Termina a sessão e volta a ligar o Spotify.',
         status,
       );
     }
     if (reason.includes('restriction')) {
       return new SpotifyApiError(
         'playback_restricted',
-        'Spotify blocked playback on the selected device or for this item.',
+        'O Spotify bloqueou a reprodução neste dispositivo ou para esta música.',
         status,
       );
     }
     return new SpotifyApiError(
       'permission_missing',
-      'Spotify refused this request. Verify Premium, the Development Mode allowlist, and the permissions granted during sign-in.',
+      'O Spotify recusou o pedido. Verifica o Premium, a allowlist e as permissões da sessão.',
       status,
     );
   }
@@ -118,7 +127,7 @@ export function classifySpotifyHttpError(
   if (status === 429) {
     return new SpotifyApiError(
       'rate_limited',
-      'Spotify temporarily limited requests. Wait before trying again.',
+      'O Spotify limitou temporariamente os pedidos. Espera um pouco e tenta novamente.',
       status,
       retryAfterSeconds,
     );
@@ -127,8 +136,8 @@ export function classifySpotifyHttpError(
   return new SpotifyApiError(
     status >= 500 ? 'spotify_unavailable' : 'unexpected_response',
     status >= 500
-      ? 'Spotify is temporarily unavailable.'
-      : `Spotify returned an unexpected response (${status}).`,
+      ? 'O Spotify está temporariamente indisponível.'
+      : `O Spotify devolveu uma resposta inesperada (${status}).`,
     status,
   );
 }
@@ -165,15 +174,133 @@ export class SpotifyApiService {
     return this.requestJson('/me/player/recently-played?limit=30');
   }
 
-  searchTracks(query: string, signal?: AbortSignal): Promise<SpotifySearchDto> {
-    const params = new URLSearchParams({ q: query, type: 'track', limit: '10' });
-    return this.requestJson(`/search?${params.toString()}`, { signal });
+  private readonly searchFailureCounts = new Map<string, number>();
+
+  searchFailureSummary(): string {
+    return [...this.searchFailureCounts].map(([reason, count]) => `${reason} ×${count}`).join(', ');
+  }
+
+  resetSearchFailures(): void {
+    this.searchFailureCounts.clear();
+  }
+
+  private rateLimitedUntil = 0;
+  private consecutiveRateLimitTrips = 0;
+  private probeInFlight: Promise<number | null> | null = null;
+
+  rateLimitRemainingSeconds(): number {
+    return Math.max(0, Math.ceil((this.rateLimitedUntil - Date.now()) / 1_000));
+  }
+
+  private searchBudget: number | null = null;
+  private searchesUsed = 0;
+
+  beginSearchBudget(limit: number): void {
+    this.searchBudget = limit;
+    this.searchesUsed = 0;
+  }
+
+  endSearchBudget(): void {
+    this.searchBudget = null;
+  }
+
+  searchBudgetRemaining(): number {
+    return this.searchBudget === null
+      ? Number.POSITIVE_INFINITY
+      : Math.max(0, this.searchBudget - this.searchesUsed);
+  }
+
+  searchTracks(query: string, signal?: AbortSignal, limit = 10): Promise<SpotifySearchDto> {
+    if (this.searchBudgetRemaining() === 0) {
+      const message = 'Este refresh já usou as pesquisas que tinha disponíveis no Spotify.';
+      return Promise.reject(new SpotifyApiError('search_budget_exhausted', message));
+    }
+    this.searchesUsed += 1;
+
+    const remaining = this.rateLimitRemainingSeconds();
+    if (remaining > 0) {
+      return Promise.reject(this.rateLimitError(remaining));
+    }
+
+    const params = new URLSearchParams({
+      q: query,
+      type: 'track',
+      limit: String(Math.min(MAX_SEARCH_LIMIT, Math.max(1, limit))),
+    });
+    return this.requestJson<SpotifySearchDto>(`/search?${params.toString()}`, { signal })
+      .then((result) => {
+        this.consecutiveRateLimitTrips = 0;
+        return result;
+      })
+      .catch((error: unknown) => {
+        if (error instanceof SpotifyApiError) {
+          const reason = `${error.status ?? 'sem-estado'}:${error.code}`;
+          this.searchFailureCounts.set(reason, (this.searchFailureCounts.get(reason) ?? 0) + 1);
+        }
+        throw error;
+      });
+  }
+
+  getTopArtists(
+    timeRange: 'short_term' | 'medium_term' | 'long_term' = 'medium_term',
+    limit = 20,
+  ): Promise<SpotifyTopItemsPageDto> {
+    const params = new URLSearchParams({ time_range: timeRange, limit: String(limit) });
+    return this.requestJson(`/me/top/artists?${params.toString()}`);
+  }
+
+  getTopTracks(
+    timeRange: 'short_term' | 'medium_term' | 'long_term' = 'medium_term',
+    limit = 50,
+  ): Promise<SpotifyTopTracksPageDto> {
+    const params = new URLSearchParams({ time_range: timeRange, limit: String(limit) });
+    return this.requestJson(`/me/top/tracks?${params.toString()}`);
+  }
+
+  getArtistAlbums(artistId: string, limit = 10): Promise<SpotifyAlbumsPageDto> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    return this.requestJson(`/artists/${encodeURIComponent(artistId)}/albums?${params.toString()}`);
+  }
+
+  getAlbumTracks(albumId: string, limit = 50): Promise<SpotifyAlbumTracksPageDto> {
+    return this.requestJson(
+      `/albums/${encodeURIComponent(albumId)}/tracks?limit=${Math.min(50, Math.max(1, limit))}`,
+    );
+  }
+
+  createPlaylist(name: string, description: string): Promise<SpotifyPlaylistDto> {
+    return this.requestJson('/me/playlists', {
+      method: 'POST',
+      body: { name, description, public: false },
+    });
+  }
+
+  replacePlaylistItems(playlistId: string, uris: readonly string[]): Promise<void> {
+    return this.requestVoid(`/playlists/${encodeURIComponent(playlistId)}/items`, {
+      method: 'PUT',
+      body: { uris: uris.slice(0, 100) },
+    });
   }
 
   startPlayback(uri?: string, deviceId?: string): Promise<void> {
     const query = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : '';
     const body = uri ? { uris: [uri] } : undefined;
     return this.requestVoid(`/me/player/play${query}`, { method: 'PUT', body });
+  }
+
+  startPlaylistPlayback(
+    uris: readonly string[],
+    deviceId?: string,
+    positionMs?: number,
+  ): Promise<void> {
+    const query = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : '';
+    return this.requestVoid(`/me/player/play${query}`, {
+      method: 'PUT',
+      body: {
+        uris: uris.slice(0, 100),
+        ...(positionMs && positionMs > 0 ? { position_ms: Math.round(positionMs) } : {}),
+      },
+    });
   }
 
   pausePlayback(deviceId?: string): Promise<void> {
@@ -245,7 +372,7 @@ export class SpotifyApiService {
     if (response.status === 204 || response.headers.get('content-length') === '0') {
       throw new SpotifyApiError(
         'unexpected_response',
-        'Spotify returned an empty response where data was expected.',
+        'O Spotify devolveu uma resposta vazia onde eram esperados dados.',
         response.status,
       );
     }
@@ -262,7 +389,12 @@ export class SpotifyApiService {
     await this.send(path, options);
   }
 
-  private async send(path: string, options: RequestOptions): Promise<Response> {
+  private async send(path: string, options: RequestOptions, retryAttempt = 0): Promise<Response> {
+    const cooldown = this.rateLimitRemainingSeconds();
+    const isRead = (options.method ?? 'GET') === 'GET';
+    if (isRead && cooldown > 0) {
+      throw this.rateLimitError(cooldown);
+    }
     const grant = await this.auth.getAccessToken();
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), 15_000);
@@ -280,18 +412,88 @@ export class SpotifyApiService {
         signal: controller.signal,
       });
 
-      if (!response.ok) throw await this.createHttpError(response);
+      if (!response.ok) {
+        const error = await this.createHttpError(response);
+        if (error.code === 'rate_limited') {
+          return await this.handleRateLimit(error, path, options, retryAttempt);
+        }
+        throw error;
+      }
+      this.consecutiveRateLimitTrips = 0;
       return response;
     } catch (error: unknown) {
       if (error instanceof SpotifyApiError) throw error;
+      if (options.signal?.aborted) throw error;
+      if (retryAttempt < 2) {
+        await this.sleep(1000);
+        return this.send(path, options, retryAttempt + 1);
+      }
       throw new SpotifyApiError(
         'network_unavailable',
-        'Spotify could not be reached. Check your connection and try again.',
+        'Não foi possível contactar o Spotify. Verifica a ligação e tenta novamente.',
       );
     } finally {
       options.signal?.removeEventListener('abort', abortFromCaller);
       window.clearTimeout(timeoutId);
     }
+  }
+
+  private rateLimitError(seconds: number): SpotifyApiError {
+    return new SpotifyApiError(
+      'rate_limited',
+      'O Spotify limitou temporariamente os pedidos. Espera um pouco e tenta novamente.',
+      429,
+      seconds,
+    );
+  }
+
+  private async handleRateLimit(
+    error: SpotifyApiError,
+    path: string,
+    options: RequestOptions,
+    retryAttempt: number,
+  ): Promise<Response> {
+    if (this.rateLimitRemainingSeconds() > 0) throw error;
+
+    const waitSeconds = await this.findOutHowLongToWait(error);
+    if (this.rateLimitRemainingSeconds() > 0) throw error;
+
+    const isShortWait = waitSeconds !== null && waitSeconds <= MAX_SHORT_WAIT_SECONDS;
+    if (isShortWait && retryAttempt < 2) {
+      await this.sleep(waitSeconds * 1000);
+      return this.send(path, options, retryAttempt + 1);
+    }
+
+    this.startCooldown(waitSeconds);
+    throw error;
+  }
+
+  private async findOutHowLongToWait(error: SpotifyApiError): Promise<number | null> {
+    if (error.retryAfterSeconds !== null) {
+      return Math.max(1, error.retryAfterSeconds);
+    }
+
+    if (this.probeInFlight === null) {
+      this.probeInFlight = this.auth.probeRateLimit().finally(() => {
+        this.probeInFlight = null;
+      });
+    }
+    const seconds = await this.probeInFlight;
+    if (seconds === null) return null;
+    return Math.max(1, seconds);
+  }
+
+  private startCooldown(waitFromSpotify: number | null): void {
+    this.consecutiveRateLimitTrips += 1;
+    const step = Math.min(this.consecutiveRateLimitTrips, COOLDOWN_STEPS_SECONDS.length) - 1;
+    const stepSeconds = COOLDOWN_STEPS_SECONDS[step] ?? 30;
+    const seconds = Math.max(waitFromSpotify ?? 0, stepSeconds);
+    const until = Date.now() + seconds * 1000;
+    this.rateLimitedUntil = Math.max(this.rateLimitedUntil, until);
+  }
+
+  private sleep(milliseconds: number): Promise<void> {
+    return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
   }
 
   private async createHttpError(response: Response): Promise<SpotifyApiError> {

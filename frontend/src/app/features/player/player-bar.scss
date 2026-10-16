@@ -7,9 +7,9 @@
   background: var(--surface-1);
   border-top: 1px solid var(--border-subtle);
   display: grid;
-  gap: 28px;
+  gap: 24px;
   grid-template-columns: minmax(240px, 0.9fr) minmax(420px, 1.4fr) minmax(260px, 0.9fr);
-  height: 80px;
+  height: 76px;
   padding: 0 20px;
   position: relative;
   z-index: 30;
@@ -34,13 +34,40 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.player__track-copy small {
+.player__track-copy small,
+.player__links {
   color: var(--text-quaternary);
   font-size: 11px;
   margin-top: 3px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.player__links {
+  align-items: center;
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+}
+.player__links button {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.player__links button:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+.player__links i {
+  flex: 0 0 auto;
+  font-style: normal;
 }
 .player__track-placeholder {
   background: var(--surface-2);

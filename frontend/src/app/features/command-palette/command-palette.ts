@@ -9,7 +9,11 @@ import {
   output,
   signal,
 } from '@angular/core';
+import { I18nService } from '../../core/i18n/i18n.service';
+import { TranslatePipe } from '../../core/i18n/translate.pipe';
 import { Track } from '../../core/models/music.models';
+import { WorkspaceNavigationService } from '../../core/navigation/workspace-navigation.service';
+import { SimilarTracksService } from '../../core/similar/similar-tracks.service';
 import { SpotifyIntegrationService } from '../../core/spotify/spotify-integration.service';
 import { MusicShellStore } from '../../core/state/music-shell.store';
 import { ArtworkComponent } from '../../shared/artwork/artwork';
@@ -27,7 +31,7 @@ interface LocalCommand {
 
 @Component({
   selector: 'app-command-palette',
-  imports: [ArtworkComponent, UiIcon],
+  imports: [ArtworkComponent, TranslatePipe, UiIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './command-palette.html',
   styleUrl: './command-palette.scss',
@@ -37,6 +41,9 @@ export class CommandPalette {
 
   protected readonly store = inject(MusicShellStore);
   protected readonly integration = inject(SpotifyIntegrationService);
+  private readonly navigation = inject(WorkspaceNavigationService);
+  private readonly similar = inject(SimilarTracksService);
+  private readonly i18n = inject(I18nService);
   protected readonly selectedIndex = signal(0);
 
   @ViewChild('paletteInput') private paletteInput?: ElementRef<HTMLInputElement>;
@@ -44,34 +51,34 @@ export class CommandPalette {
   private readonly commands: readonly LocalCommand[] = [
     {
       id: 'home',
-      label: 'Open home',
-      hint: 'Navigation',
-      keywords: 'playlists music recent',
+      label: 'Abrir início',
+      hint: 'Navegação',
+      keywords: 'home início playlists música recente',
       icon: 'home',
-      run: () => this.store.setCollection('home'),
+      run: () => this.navigation.goHome(),
     },
     {
       id: 'liked',
-      label: 'Open saved tracks',
-      hint: 'Navigation',
-      keywords: 'liked saved plus',
+      label: 'Abrir favoritas',
+      hint: 'Navegação',
+      keywords: 'liked favoritas guardadas',
       icon: 'plus',
-      run: () => this.store.setCollection('liked'),
+      run: () => this.navigation.openCollection('liked'),
     },
     {
       id: 'playback',
-      label: 'Play or pause',
-      hint: 'Player',
-      keywords: 'music resume stop',
+      label: 'Reproduzir ou pausar',
+      hint: 'Leitor',
+      keywords: 'música retomar parar',
       icon: 'play',
       shortcut: 'Space',
       run: () => void this.integration.togglePlayback(),
     },
     {
       id: 'account',
-      label: 'Spotify connection & security',
-      hint: 'Settings',
-      keywords: 'account login oauth pkce client id',
+      label: 'Ligação ao Spotify',
+      hint: 'Definições',
+      keywords: 'conta login oauth segurança client id',
       icon: 'lock',
       run: () => this.openAccount.emit(),
     },
@@ -81,7 +88,9 @@ export class CommandPalette {
     const query = this.store.commandQuery().trim().toLocaleLowerCase();
     if (!query) return this.commands;
     return this.commands.filter((command) =>
-      `${command.label} ${command.hint} ${command.keywords}`.toLocaleLowerCase().includes(query),
+      `${command.label} ${this.i18n.t(command.label)} ${command.hint} ${command.keywords}`
+        .toLocaleLowerCase()
+        .includes(query),
     );
   });
 
@@ -139,7 +148,17 @@ export class CommandPalette {
   }
 
   protected playTrack(track: Track): void {
-    void this.integration.playTrack(track);
+    const results = this.visibleTracks();
+    const index = results.findIndex((item) => item.id === track.id);
+    if (index < 0 || results.length < 2) {
+      void this.integration.playTrack(track);
+    } else {
+      void this.integration.playTracks([...results.slice(index), ...results.slice(0, index)]);
+    }
+    void this.similar
+      .forTrack(track)
+      .then((tracks) => this.integration.extendQueue(tracks, track.id))
+      .catch(() => undefined);
     this.store.closeCommandPalette();
   }
 

@@ -1,0 +1,155 @@
+<div class="settings-backdrop" (mousedown)="closed.emit()">
+  <section
+    class="settings-panel"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="settings-title"
+    (mousedown)="$event.stopPropagation()"
+  >
+    <header>
+      <h2 id="settings-title">{{ 'Definições' | t }}</h2>
+      <button
+        class="icon-button"
+        type="button"
+        [attr.aria-label]="'Fechar' | t"
+        (click)="closed.emit()"
+      >
+        <app-icon name="close" [size]="17" />
+      </button>
+    </header>
+
+    <section class="settings-group">
+      <h3>{{ 'Geral' | t }}</h3>
+      <label class="settings-row">
+        <span>
+          <strong>{{ 'Língua' | t }}</strong>
+          <small>{{ 'Muda o idioma da interface.' | t }}</small>
+        </span>
+        <select [value]="i18n.language()" (change)="changeLanguage($event)">
+          <option value="pt">Português</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="settings-group">
+      <h3>{{ 'Aparência' | t }}</h3>
+      <div class="settings-row settings-row--stacked">
+        <span>
+          <strong>{{ 'Cor de destaque' | t }}</strong>
+          <small>{{ 'Usada no que está a tocar e a ser gerado.' | t }}</small>
+        </span>
+        <div class="swatches" role="group" [attr.aria-label]="'Cor de destaque' | t">
+          @for (preset of accents; track preset.id) {
+            <button
+              type="button"
+              class="swatch"
+              [class.swatch--active]="settings.accentId() === preset.id"
+              [style.background]="preset.accent"
+              [attr.aria-label]="preset.label | t"
+              [attr.aria-pressed]="settings.accentId() === preset.id"
+              [title]="preset.label | t"
+              (click)="settings.setAccent(preset.id)"
+            ></button>
+          }
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-group">
+      <h3>{{ 'Sistema' | t }}</h3>
+      <div class="settings-row">
+        <span>
+          <strong>{{ 'Abrir a Queuer ao iniciar o Windows' | t }}</strong>
+          <small>
+            @if (!settings.isDesktop) {
+              {{ 'Só está disponível na aplicação desktop.' | t }}
+            } @else if (settings.startupError(); as startupError) {
+              {{ startupError | t }}
+            } @else {
+              {{ 'A app abre quando entras no Windows. Podes desligar aqui.' | t }}
+            }
+          </small>
+        </span>
+        <button
+          type="button"
+          class="toggle"
+          role="switch"
+          [class.toggle--on]="settings.startupEnabled() === true"
+          [attr.aria-checked]="settings.startupEnabled() === true"
+          [disabled]="!settings.isDesktop || settings.startupEnabled() === null"
+          [attr.aria-label]="'Abrir a Queuer ao iniciar o Windows' | t"
+          (click)="toggleStartup()"
+        >
+          <span></span>
+        </button>
+      </div>
+    </section>
+
+    <section class="settings-group">
+      <h3>{{ 'Dados e privacidade' | t }}</h3>
+
+      <div class="settings-row">
+        <span>
+          <strong>{{ 'Histórico importado' | t }}</strong>
+          <small>
+            @if (history.summary(); as summary) {
+              {{ summary.playCount.toLocaleString(i18n.locale()) }} {{ 'reproduções' | t }} ·
+              {{ summary.distinctTrackCount.toLocaleString(i18n.locale()) }} {{ 'músicas' | t }}
+            } @else {
+              {{ 'Nenhum histórico importado.' | t }}
+            }
+          </small>
+        </span>
+        <button
+          type="button"
+          class="settings-action settings-action--danger"
+          [disabled]="!history.summary()"
+          (click)="askOrRun('history')"
+        >
+          {{ (confirming() === 'history' ? 'Confirmar' : 'Apagar') | t }}
+        </button>
+      </div>
+
+      <div class="settings-row">
+        <span>
+          <strong>{{ 'Caches de pesquisa' | t }}</strong>
+          <small>{{
+            'Limpar obriga a confirmar músicas outra vez no Spotify, com pesquisas da tua quota.'
+              | t
+          }}</small>
+        </span>
+        <button type="button" class="settings-action" (click)="clearCaches()">
+          {{ 'Limpar' | t }}
+        </button>
+      </div>
+
+      <div class="settings-row">
+        <span>
+          <strong>{{ 'Chave da Anthropic' | t }}</strong>
+          <small>{{
+            (claude.status().configured
+              ? 'Guardada no cofre do Windows.'
+              : 'Não há nenhuma chave guardada.'
+            ) | t
+          }}</small>
+        </span>
+        <button
+          type="button"
+          class="settings-action settings-action--danger"
+          [disabled]="!claude.status().configured || claude.busy()"
+          (click)="askOrRun('claude-key')"
+        >
+          {{ (confirming() === 'claude-key' ? 'Confirmar' : 'Remover') | t }}
+        </button>
+      </div>
+
+      <p class="settings-note">
+        {{
+          'O ZIP bruto fica neste computador. Só um perfil agregado é enviado ao Claude, e só se tiveres uma chave.'
+            | t
+        }}
+      </p>
+    </section>
+  </section>
+</div>

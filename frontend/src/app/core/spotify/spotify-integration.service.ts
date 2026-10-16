@@ -1,7 +1,9 @@
 import { Injectable, signal } from '@angular/core';
 import { SpotifyAuthService } from '../auth/spotify-auth.service';
-import { PlaybackDevice, Track } from '../models/music.models';
+import { PlaybackDevice, QueuerMix, Track } from '../models/music.models';
+import { I18nService } from '../i18n/i18n.service';
 import { MusicShellStore } from '../state/music-shell.store';
+import { MixEngineService } from '../mixes/mix-engine.service';
 import {
   NO_PLAYBACK_DEVICE_MESSAGE,
   SpotifyApiError,
@@ -9,20 +11,21 @@ import {
   type SpotifyApiErrorCode,
 } from './spotify-api.service';
 import { mapSpotifyDevice, mapSpotifyRepeatMode, mapSpotifyTrack } from './spotify-mappers';
+import { PlaybackSdkService } from './playback-sdk.service';
 import { SpotifyWorkspaceService } from './spotify-workspace.service';
 
 const PLAYBACK_SYNC_INTERVAL_MS = 30_000;
 const ERROR_TITLES: Partial<Record<SpotifyApiErrorCode, string>> = {
-  no_active_device: 'No playback device',
-  premium_required: 'Spotify Premium required',
-  account_not_allowlisted: 'Account not allowed',
-  development_quota_exceeded: 'Spotify quota reached',
-  playback_restricted: 'Playback restricted',
-  permission_missing: 'Spotify permission missing',
-  authentication_required: 'Spotify sign-in required',
-  rate_limited: 'Spotify rate limit reached',
-  network_unavailable: 'Spotify is unreachable',
-  spotify_unavailable: 'Spotify is unavailable',
+  no_active_device: 'Nenhum dispositivo disponível',
+  premium_required: 'É necessário Spotify Premium',
+  account_not_allowlisted: 'Conta sem acesso',
+  development_quota_exceeded: 'Limite do Spotify atingido',
+  playback_restricted: 'Reprodução bloqueada',
+  permission_missing: 'Falta uma permissão do Spotify',
+  authentication_required: 'Volta a ligar o Spotify',
+  rate_limited: 'Pedidos ao Spotify limitados',
+  network_unavailable: 'Não foi possível chegar ao Spotify',
+  spotify_unavailable: 'Spotify indisponível',
 };
 
 @Injectable({ providedIn: 'root' })
@@ -45,6 +48,9 @@ export class SpotifyIntegrationService {
     private readonly api: SpotifyApiService,
     private readonly store: MusicShellStore,
     private readonly workspace: SpotifyWorkspaceService,
+    private readonly mixes: MixEngineService,
+    private readonly playbackSdk: PlaybackSdkService,
+    private readonly i18n: I18nService = new I18nService(),
   ) {}
 
   async initialize(): Promise<void> {
@@ -62,6 +68,7 @@ export class SpotifyIntegrationService {
     this.searchAbortController?.abort();
     this.searchAbortController = null;
     this.searchSequence += 1;
+    this.playbackSdk.disconnect();
     this.auth.destroy();
   }
 
@@ -89,7 +96,8 @@ export class SpotifyIntegrationService {
           .filter((track): track is Track => track !== null);
         this.searchResults.set(tracks);
       } catch (error: unknown) {
-        if (sequence === this.searchSequence) this.handleError(error, 'Spotify search failed.');
+        if (sequence === this.searchSequence)
+          this.handleError(error, 'A pesquisa no Spotify falhou.');
       } finally {
         if (sequence === this.searchSequence) {
           this.searchAbortController = null;
@@ -109,16 +117,33 @@ export class SpotifyIntegrationService {
       this.store.replaceWithSpotify(snapshot);
       this.mode.set('spotify');
       this.startPolling();
+      void this.playbackSdk.prepare().catch(() => undefined);
       this.store.showToast(
-        failedRequests > 0 ? 'Spotify connected with limited data' : 'Spotify connected',
+        failedRequests > 0 ? 'Spotify ligado com dados limitados' : 'Spotify ligado',
         failedRequests > 0
-          ? 'Some Spotify views are unavailable for this account or app configuration.'
-          : `${snapshot.tracks.filter((track) => track.liked).length} saved tracks loaded.`,
+          ? 'Algumas áreas não estão disponíveis para esta conta ou configuração.'
+          : this.i18n.t('{count} músicas guardadas carregadas.', {
+              count: snapshot.tracks.filter((track) => track.liked).length,
+            }),
       );
+      try {
+        await this.mixes.initialize();
+        for (const mix of this.mixes.mixes().filter((item) => item.syncEnabled)) {
+          try {
+            const synced = await this.syncMixToSpotify(mix);
+            this.mixes.markSynced(mix.id, synced.playlistId, synced.spotifyUrl);
+          } catch {}
+        }
+      } catch {
+        this.store.showToast(
+          'Spotify ligado; mixes por atualizar',
+          'Volta a ligar a conta se faltar a permissão para ler os artistas mais ouvidos.',
+        );
+      }
     } catch (error: unknown) {
       this.handleError(
         error,
-        'Spotify data could not be loaded. The fictional demo remains available.',
+        'Não foi possível carregar os dados. A demonstração continua disponível.',
       );
       this.mode.set('demo');
       this.store.restoreDemo();
@@ -130,17 +155,52 @@ export class SpotifyIntegrationService {
   async disconnect(): Promise<void> {
     await this.auth.logout();
     this.stopPolling();
+    this.playbackSdk.disconnect();
     this.mode.set('demo');
     this.store.restoreDemo();
     this.store.showToast(
-      'Signed out',
-      'The secure Spotify session was removed from this computer.',
+      'Sessão terminada',
+      'A sessão segura do Spotify foi removida deste computador.',
     );
   }
 
-  async openCollection(collectionId: string): Promise<void> {
+  async openCollection(collectionId: string, options: { reuse?: boolean } = {}): Promise<void> {
     if (this.mode() !== 'spotify' || ['home', 'liked', 'recent'].includes(collectionId)) {
       this.store.setCollection(collectionId);
+      return;
+    }
+    if (
+      options.reuse &&
+      this.store.tracks().some((track) => track.playlistIds.includes(collectionId))
+    ) {
+      this.store.setCollection(collectionId);
+      return;
+    }
+
+    if (collectionId.startsWith('artist:') || collectionId.startsWith('album:')) {
+      const separator = collectionId.indexOf(':');
+      const type = collectionId.slice(0, separator);
+      let name = collectionId.slice(separator + 1);
+      try {
+        name = decodeURIComponent(name);
+      } catch {}
+      this.syncing.set(true);
+      try {
+        const response = await this.api.searchTracks(`${type}:"${name.replace(/"/g, '')}"`);
+        const tracks = (response.tracks?.items ?? [])
+          .map((track) => mapSpotifyTrack(track, new Date().toISOString(), false))
+          .filter((track): track is Track => track !== null);
+        this.store.mergeSpotifyCollection(collectionId, tracks);
+      } catch (error: unknown) {
+        this.handleError(
+          error,
+          type === 'artist'
+            ? 'Não foi possível abrir o artista.'
+            : 'Não foi possível abrir o álbum.',
+        );
+      } finally {
+        this.syncing.set(false);
+      }
       return;
     }
 
@@ -160,27 +220,107 @@ export class SpotifyIntegrationService {
     } catch (error: unknown) {
       this.handleError(
         error,
-        'This playlist cannot be read. In Development Mode, Spotify may expose items only for playlists you own or collaborate on.',
+        'Esta playlist não pode ser lida. Em Development Mode, o Spotify pode mostrar apenas playlists tuas ou colaborativas.',
       );
     } finally {
       this.syncing.set(false);
     }
   }
 
-  playTrack(track: Track): Promise<void> {
+  playTrack(track: Track, contextId: string | null = null): Promise<void> {
+    this.store.playbackContextId.set(contextId);
+    this.store.registerTracks([track]);
     if (this.mode() === 'demo') {
       this.store.playTrack(track.id);
       return Promise.resolve();
     }
     if (!track.uri) {
-      this.store.showToast('This item cannot be played', 'Spotify did not provide a playable URI.');
+      this.store.showToast(
+        'Não é possível reproduzir',
+        'O Spotify não forneceu uma música válida.',
+      );
       return Promise.resolve();
     }
     this.store.playTrack(track.id);
+    const queuerDevice = this.playbackSdk.activateForUserGesture();
     return this.enqueueControl(async () => {
-      const deviceId = await this.resolvePlaybackDeviceId();
+      const deviceId = (await queuerDevice) ?? (await this.resolvePlaybackDeviceId());
       await this.api.startPlayback(track.uri, deviceId);
     }, true);
+  }
+
+  async extendQueue(tracks: readonly Track[], seedId: string): Promise<void> {
+    if (tracks.length === 0 || this.store.currentTrackId() !== seedId) return;
+    const known = new Set([seedId, ...this.store.queueIds()]);
+    const fresh = tracks.filter((track) => !known.has(track.id));
+    if (fresh.length === 0) return;
+    this.store.registerTracks(fresh);
+    this.store.appendToQueue(fresh.map((track) => track.id));
+    if (this.mode() === 'demo' || !this.store.isPlaying()) return;
+
+    const current = this.store.currentTrack();
+    const progressMs = this.store.progressSeconds() * 1_000;
+    const byId = new Map(this.store.tracks().map((track) => [track.id, track]));
+    const uris = [current, ...this.store.queueIds().map((id) => byId.get(id))].flatMap((track) =>
+      track?.uri ? [track.uri] : [],
+    );
+    if (!current?.uri || uris.length < 2) return;
+    const queuerDevice = this.playbackSdk.activateForUserGesture();
+    await this.enqueueControl(async () => {
+      if (this.store.currentTrackId() !== seedId) return;
+      const deviceId = (await queuerDevice) ?? (await this.resolvePlaybackDeviceId());
+      await this.api.startPlaylistPlayback(uris, deviceId, progressMs);
+    });
+  }
+
+  playTracks(tracks: readonly Track[], contextId: string | null = null): Promise<void> {
+    this.store.playbackContextId.set(contextId);
+    this.store.registerTracks(tracks);
+    if (this.mode() === 'demo') {
+      this.store.playSequence(tracks.map((track) => track.id));
+      return Promise.resolve();
+    }
+    const playable = tracks.filter((track) => track.uri);
+    if (playable.length === 0) {
+      this.store.showToast('Esta mix ainda não tem músicas reproduzíveis');
+      return Promise.resolve();
+    }
+    this.store.playSequence(playable.map((track) => track.id));
+    const queuerDevice = this.playbackSdk.activateForUserGesture();
+    return this.enqueueControl(async () => {
+      const deviceId = (await queuerDevice) ?? (await this.resolvePlaybackDeviceId());
+      await this.api.startPlaylistPlayback(
+        playable.flatMap((track) => (track.uri ? [track.uri] : [])),
+        deviceId,
+      );
+    }, true);
+  }
+
+  async syncMixToSpotify(
+    mix: QueuerMix,
+  ): Promise<{ readonly playlistId: string; readonly spotifyUrl?: string }> {
+    if (this.mode() !== 'spotify') {
+      throw new Error('Liga o Spotify antes de sincronizar uma mix.');
+    }
+    const uris = mix.tracks.flatMap((track) => (track.uri ? [track.uri] : [])).slice(0, 100);
+    if (uris.length === 0) throw new Error('Esta mix ainda não tem músicas para sincronizar.');
+
+    let playlistId = mix.spotifyPlaylistId;
+    let spotifyUrl = mix.spotifyUrl;
+    if (!playlistId) {
+      const playlist = await this.api.createPlaylist(
+        `Queuer · ${mix.name}`,
+        'Atualizada pelo Queuer. Alterações manuais podem ser substituídas na próxima sincronização.',
+      );
+      playlistId = playlist.id;
+      spotifyUrl = playlist.external_urls?.spotify;
+    }
+    await this.api.replacePlaylistItems(playlistId, uris);
+    this.store.showToast(
+      'Mix sincronizada com o Spotify',
+      this.i18n.t('{count} músicas · {name}', { count: uris.length, name: mix.name }),
+    );
+    return { playlistId, ...(spotifyUrl ? { spotifyUrl } : {}) };
   }
 
   togglePlayback(): Promise<void> {
@@ -190,12 +330,15 @@ export class SpotifyIntegrationService {
     }
     const wasPlaying = this.store.isPlaying();
     this.store.togglePlayback();
+    const queuerDevice = wasPlaying
+      ? Promise.resolve<string | null>(null)
+      : this.playbackSdk.activateForUserGesture();
     return this.enqueueControl(async () => {
       if (wasPlaying) {
         await this.api.pausePlayback(this.store.activeDevice()?.id);
         return;
       }
-      const deviceId = await this.resolvePlaybackDeviceId();
+      const deviceId = (await queuerDevice) ?? (await this.resolvePlaybackDeviceId());
       await this.api.startPlayback(undefined, deviceId);
     }, true);
   }
@@ -249,12 +392,19 @@ export class SpotifyIntegrationService {
   toggleShuffle(): Promise<void> {
     this.store.toggleShuffle();
     if (this.mode() === 'demo') return Promise.resolve();
-    return this.enqueueControl(() =>
-      this.api.setShuffle(this.store.shuffleEnabled(), this.store.activeDevice()?.id),
-    );
+    const enabled = this.store.shuffleEnabled();
+    return this.enqueueControl(async () => {
+      try {
+        await this.api.setShuffle(enabled, this.store.activeDevice()?.id);
+      } catch (error: unknown) {
+        this.store.shuffleEnabled.set(!enabled);
+        throw error;
+      }
+    });
   }
 
   cycleRepeat(): Promise<void> {
+    const previousRepeat = this.store.repeatMode();
     this.store.cycleRepeat();
     if (this.mode() === 'demo') return Promise.resolve();
     const apiMode =
@@ -263,12 +413,19 @@ export class SpotifyIntegrationService {
         : this.store.repeatMode() === 'all'
           ? 'context'
           : 'off';
-    return this.enqueueControl(() => this.api.setRepeat(apiMode, this.store.activeDevice()?.id));
+    return this.enqueueControl(async () => {
+      try {
+        await this.api.setRepeat(apiMode, this.store.activeDevice()?.id);
+      } catch (error: unknown) {
+        this.store.repeatMode.set(previousRepeat);
+        throw error;
+      }
+    });
   }
 
   async transferPlayback(deviceId: string): Promise<boolean> {
     if (this.mode() === 'demo') {
-      this.store.showToast('Spotify is not connected');
+      this.store.showToast('O Spotify não está ligado');
       return false;
     }
     let transferred = false;
@@ -289,7 +446,7 @@ export class SpotifyIntegrationService {
     return this.enqueueControl(async () => {
       const deviceId = await this.resolvePlaybackDeviceId();
       await this.api.addToQueue(uri, deviceId);
-      this.store.showToast('Added to Spotify queue', track.title);
+      this.store.showToast('Adicionada à fila do Spotify', track.title);
     }, true);
   }
 
@@ -305,12 +462,12 @@ export class SpotifyIntegrationService {
       if (nextLiked) await this.api.saveToLibrary(track.uri);
       else await this.api.removeFromLibrary(track.uri);
       this.store.showToast(
-        nextLiked ? 'Saved to your tracks' : 'Removed from saved tracks',
+        nextLiked ? 'Guardada na biblioteca' : 'Removida da biblioteca',
         track.title,
       );
     } catch (error: unknown) {
       this.store.setTrackLiked(track.id, !nextLiked);
-      this.handleError(error, 'Spotify could not update your saved tracks.');
+      this.handleError(error, 'O Spotify não conseguiu atualizar a biblioteca.');
     }
   }
 
@@ -322,7 +479,7 @@ export class SpotifyIntegrationService {
     try {
       await this.auth.openExternalUrl(track.spotifyUrl);
     } catch (error: unknown) {
-      this.handleError(error, 'The Spotify page could not be opened.');
+      this.handleError(error, 'Não foi possível abrir a página no Spotify.');
     }
   }
 
@@ -333,7 +490,7 @@ export class SpotifyIntegrationService {
         await action();
         if (refreshAfter) await this.refreshPlayback();
       } catch (error: unknown) {
-        this.handleError(error, 'Spotify could not complete that playback action.');
+        this.handleError(error, 'O Spotify não conseguiu concluir esta ação.');
         await this.refreshPlayback();
       }
     };
@@ -389,17 +546,26 @@ export class SpotifyIntegrationService {
     const queue = queueResult.status === 'fulfilled' ? queueResult.value : null;
     const devices = devicesResult.status === 'fulfilled' ? devicesResult.value.devices : undefined;
 
+    const playbackFailed = playbackResult.status === 'rejected';
     this.store.updateRemotePlayback({
-      currentTrack: mapSpotifyTrack(
-        playback?.item ?? queue?.currently_playing ?? null,
-        new Date().toISOString(),
-        false,
-      ),
-      isPlaying: playback?.is_playing ?? false,
-      progressSeconds: Math.floor((playback?.progress_ms ?? 0) / 1_000),
-      volume: playback?.device.volume_percent ?? null,
-      shuffleEnabled: playback?.shuffle_state ?? false,
-      repeatMode: mapSpotifyRepeatMode(playback?.repeat_state),
+      ...(playbackFailed
+        ? {}
+        : {
+            currentTrack: mapSpotifyTrack(
+              playback?.item ?? queue?.currently_playing ?? null,
+              new Date().toISOString(),
+              false,
+            ),
+            isPlaying: playback?.is_playing ?? false,
+            progressSeconds: Math.floor((playback?.progress_ms ?? 0) / 1_000),
+            volume: playback?.device.volume_percent ?? null,
+          }),
+      ...(playback
+        ? {
+            shuffleEnabled: playback.shuffle_state,
+            repeatMode: mapSpotifyRepeatMode(playback.repeat_state),
+          }
+        : {}),
       ...(devices ? { devices: devices.map(mapSpotifyDevice) } : {}),
       ...(queue
         ? {
@@ -429,8 +595,8 @@ export class SpotifyIntegrationService {
     this.lastError.set(message);
     const title =
       error instanceof SpotifyApiError
-        ? (ERROR_TITLES[error.code] ?? 'Spotify action failed')
-        : 'Spotify action failed';
+        ? (ERROR_TITLES[error.code] ?? 'Ação do Spotify falhou')
+        : 'Ação do Spotify falhou';
     this.store.showToast(title, message, 'error');
   }
 }

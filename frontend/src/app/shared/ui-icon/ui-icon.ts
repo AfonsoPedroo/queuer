@@ -21,6 +21,7 @@ export type IconName =
   | 'repeat'
   | 'repeat-one'
   | 'search'
+  | 'settings'
   | 'shuffle'
   | 'volume'
   | 'volume-off'

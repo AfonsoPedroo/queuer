@@ -30,6 +30,7 @@ export interface Track {
   readonly id: string;
   readonly title: string;
   readonly artist: string;
+  readonly artistIds?: readonly string[];
   readonly album: string;
   readonly durationSeconds: number;
   readonly addedAt: string;
@@ -41,6 +42,7 @@ export interface Track {
   readonly uri?: string;
   readonly liked: boolean;
   readonly source?: 'demo' | 'spotify';
+  readonly releaseDate?: string;
 }
 
 export interface Playlist {
@@ -52,6 +54,53 @@ export interface Playlist {
   readonly trackCount: number;
   readonly spotifyUrl?: string;
   readonly source?: 'demo' | 'spotify';
+}
+
+export type MixKind = 'discovery' | 'releases' | 'daily' | 'rediscover' | 'repeat' | 'custom';
+export type MixAccent = 'ember' | 'moss' | 'ocean' | 'plum' | 'sand' | 'slate';
+
+export interface QueuerMix {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly kind: MixKind;
+  readonly accent: MixAccent;
+  readonly tracks: readonly Track[];
+  readonly targetCount: number;
+  readonly updatedAt: string;
+  readonly prompt?: string;
+  readonly spotifyPlaylistId?: string;
+  readonly spotifyUrl?: string;
+  readonly syncEnabled?: boolean;
+}
+
+export interface ListeningHistorySummary {
+  readonly importedAt: string;
+  readonly firstPlayedAt: string | null;
+  readonly lastPlayedAt: string | null;
+  readonly playCount: number;
+  readonly distinctTrackCount: number;
+  readonly totalHours: number;
+  readonly sourceFileCount: number;
+  readonly topArtists: readonly { readonly name: string; readonly plays: number }[];
+  readonly topTracks: readonly {
+    readonly title: string;
+    readonly artist: string;
+    readonly plays: number;
+  }[];
+}
+
+export type PlaylistPrototypeMode =
+  'adjacent' | 'deep-cuts' | 'rediscover' | 'era' | 'comfort' | 'contrast';
+
+export interface PlaylistPrototype {
+  readonly id: string;
+  readonly mode: PlaylistPrototypeMode;
+  readonly seedArtists: readonly string[];
+  readonly seedTracks: readonly { readonly title: string; readonly artist: string }[];
+  readonly era: string;
+  readonly discoveryPercent: number;
+  readonly brief: string;
 }
 
 export interface UserProfile {

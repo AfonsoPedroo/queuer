@@ -1,151 +1,664 @@
-<main class="music-home" aria-labelledby="page-title">
-  <header class="page-header">
-    <div>
-      <h1 id="page-title">{{ isHome() ? 'Home' : store.collectionTitle() }}</h1>
-      <p>
-        @if (isHome()) {
-          Playlists, recent tracks and saved music.
-        } @else {
-          {{ store.collectionDescription() }}
-        }
-      </p>
+<ng-template #mixCard let-mix>
+  <article
+    class="daily-card"
+    [class.daily-card--now]="isMixCurrent(mix)"
+    tabindex="0"
+    (click)="openMix(mix)"
+    (keydown.enter)="openMix(mix)"
+  >
+    <div class="daily-card__cover">
+      <app-mix-mosaic [mix]="mix" />
+      <button
+        class="daily-card__play"
+        type="button"
+        [attr.aria-label]="('Ouvir' | t) + ' ' + (mix.name | t)"
+        [disabled]="mix.tracks.length === 0"
+        (click)="$event.stopPropagation(); playMix(mix)"
+      >
+        <app-icon name="play" [size]="15" />
+      </button>
     </div>
-    @if (integration.mode() === 'demo') {
-      <span><strong>Demo mode.</strong> Fictional music.</span>
-    }
-  </header>
+    <strong>{{ mix.name | t }}</strong>
+    <small>{{
+      artistLine(mix) || (mix.tracks.length ? (mix.description | t) : emptyHint(mix))
+    }}</small>
+    <em>{{ mix.tracks.length }} {{ 'músicas' | t }}</em>
+  </article>
+</ng-template>
 
-  @if (isHome()) {
-    <section class="shelf" aria-labelledby="playlists-title">
-      <header class="section-heading">
-        <h2 id="playlists-title">Your playlists</h2>
-        <div class="playlist-tools">
-          <span class="playlist-tools__count">{{ store.playlists().length }} playlists</span>
-          @if (store.playlists().length > 1) {
-            <label class="playlist-sort">
-              <span class="visually-hidden">Sort playlists</span>
-              <select
-                aria-label="Sort playlists"
-                [value]="playlistSort()"
-                (change)="updatePlaylistSort($event)"
-              >
-                <option value="spotify">Spotify order</option>
-                <option value="name">A–Z</option>
-                <option value="tracks">Most tracks</option>
-              </select>
-              <app-icon name="chevron-down" [size]="13" />
-            </label>
-          }
-          @if (store.playlists().length > 6) {
+<main class="music-home">
+  <input
+    #historyInput
+    class="hidden-input"
+    type="file"
+    accept=".zip,.json,application/zip,application/json"
+    multiple
+    (change)="importHistory($event)"
+  />
+
+  @if (navigation.view() === 'mix' && mixes.selectedMix(); as mix) {
+    <section class="mix-detail" [attr.aria-labelledby]="'mix-' + mix.id">
+      <button class="back-button" type="button" (click)="navigation.goHome()">
+        <span aria-hidden="true">←</span> {{ 'Voltar' | t }}
+      </button>
+
+      <header class="mix-hero">
+        <app-mix-mosaic class="mix-hero__cover" [mix]="mix" [size]="190" />
+        <div class="mix-hero__copy">
+          <span>{{
+            mix.kind === 'custom' ? ('Mix criada por ti' | t) : ('Atualizada hoje' | t)
+          }}</span>
+          <h1 [id]="'mix-' + mix.id">{{ mix.name | t }}</h1>
+          <p>
+            {{ artistLine(mix, 5) || (mix.tracks.length ? (mix.description | t) : emptyHint(mix)) }}
+          </p>
+          <small
+            >{{ mix.tracks.length }} {{ 'músicas' | t }}
+            @if (mixDuration(mix); as duration) {
+              · {{ duration }}
+            }
+          </small>
+          <div class="mix-actions">
             <button
-              class="playlist-toggle"
+              class="primary-button"
               type="button"
-              [attr.aria-expanded]="playlistsExpanded()"
-              aria-controls="playlist-grid"
-              (click)="togglePlaylistsExpanded()"
+              [disabled]="mix.tracks.length === 0"
+              (click)="playMix(mix)"
             >
-              {{ playlistsExpanded() ? 'Show less' : 'Show all' }}
-              <app-icon
-                name="chevron-down"
-                [size]="13"
-                [class.playlist-toggle__icon--expanded]="playlistsExpanded()"
-              />
+              <app-icon name="play" [size]="15" /> {{ 'Ouvir' | t }}
             </button>
-          }
+            <button
+              class="secondary-button"
+              type="button"
+              [disabled]="integration.mode() !== 'spotify' || mix.tracks.length === 0"
+              (click)="syncMix(mix)"
+            >
+              <app-icon [name]="mix.syncEnabled ? 'check' : 'plus'" [size]="15" />
+              {{ mix.syncEnabled ? ('Sincronizada' | t) : ('Guardar no Spotify' | t) }}
+            </button>
+            @if (mix.syncEnabled) {
+              <button class="text-button" type="button" (click)="mixes.stopSync(mix.id)">
+                {{ 'Deixar de sincronizar' | t }}
+              </button>
+            }
+          </div>
         </div>
       </header>
 
-      <div class="playlist-grid" id="playlist-grid">
-        @for (playlist of visiblePlaylists(); track playlist.id) {
-          <button class="playlist-card" type="button" (click)="openCollection(playlist.id)">
-            <app-artwork [artwork]="playlist.artwork" [size]="168" />
-            <span>
-              <strong>{{ playlist.name }}</strong>
-              <small>{{ playlist.trackCount }} tracks</small>
-            </span>
-          </button>
-        }
+      <div class="mix-track-head" aria-hidden="true">
+        <span>#</span><span>{{ 'Música' | t }}</span
+        ><span>{{ 'Álbum' | t }}</span
+        ><span>{{ 'Duração' | t }}</span
+        ><span></span>
       </div>
-    </section>
-
-    <div class="home-columns">
-      <section class="track-section" aria-labelledby="tracks-title">
-        <header class="section-heading">
-          <h2 id="tracks-title">Tracks</h2>
-        </header>
-
-        <div class="track-list">
-          @for (track of homeTracks(); track track.id) {
-            <button class="track-row" type="button" (click)="play(track)">
-              <app-artwork [artwork]="track.artwork" [size]="48" />
-              <span
-                ><strong>{{ track.title }}</strong
-                ><small>{{ track.artist }}</small></span
-              >
-              <span class="track-row__album">{{ track.album }}</span>
-              <time>{{ formatDuration(track.durationSeconds) }}</time>
+      <div class="mix-tracks">
+        @for (track of mix.tracks; track track.id; let position = $index) {
+          <div
+            class="mix-track-row"
+            [class.mix-track-row--current]="track.id === store.currentTrackId()"
+            [attr.aria-current]="track.id === store.currentTrackId() ? 'true' : null"
+          >
+            <button class="track-position" type="button" (click)="play(track)">
+              @if (track.id === store.currentTrackId()) {
+                <i class="now-bars" [class.now-bars--paused]="!store.isPlaying()" aria-hidden="true"
+                  ><b></b><b></b><b></b
+                ></i>
+              }
+              <span>{{ position + 1 }}</span
+              ><app-icon name="play" [size]="12" />
             </button>
-          }
-        </div>
-      </section>
-
-      <section class="track-section" aria-labelledby="shortcuts-title">
-        <header class="section-heading">
-          <h2 id="shortcuts-title">Shortcuts</h2>
-        </header>
-
-        <div class="shortcut-list">
-          <button type="button" (click)="openCollection('liked')">
-            <span class="shortcut-list__icon"><app-icon name="heart" [size]="17" /></span>
-            <span
-              ><strong>Liked Songs</strong><small>{{ likedCount() }} tracks</small></span
+            <div class="track-identity">
+              <button class="track-cover-button" type="button" (click)="play(track)">
+                <app-artwork [artwork]="track.artwork" [size]="42" />
+              </button>
+              <span>
+                <button class="track-title-button" type="button" (click)="play(track)">
+                  {{ track.title }}
+                </button>
+                <button class="track-link-button" type="button" (click)="openArtist(track.artist)">
+                  {{ track.artist }}
+                </button>
+              </span>
+            </div>
+            <button
+              class="track-album track-link-button"
+              type="button"
+              (click)="openAlbum(track.album)"
             >
-          </button>
-          <button type="button" (click)="openCollection('recent')">
-            <span class="shortcut-list__icon"><app-icon name="history" [size]="17" /></span>
-            <span><strong>Recently Played</strong><small>Listening history</small></span>
-          </button>
-        </div>
-      </section>
-    </div>
-  } @else {
-    <section class="collection" aria-label="Collection tracks">
-      <div class="collection__head">
-        <span>Track</span>
-        <span>Album</span>
-        <span>Time</span>
-      </div>
-
-      <div class="collection__tracks">
-        @for (track of store.filteredTracks(); track track.id) {
-          <div class="collection-row">
-            <button class="track-row__identity" type="button" (click)="play(track)">
-              <app-artwork [artwork]="track.artwork" [size]="48" />
-              <span
-                ><strong>{{ track.title }}</strong
-                ><small>{{ track.artist }}</small></span
-              >
+              {{ track.album }}
             </button>
-            <span>{{ track.album }}</span>
             <time>{{ formatDuration(track.durationSeconds) }}</time>
             <button
               class="save-button"
               type="button"
               [class.save-button--active]="track.liked"
-              [attr.aria-label]="track.liked ? 'Remove from saved tracks' : 'Save track'"
+              [attr.aria-label]="
+                track.liked ? ('Remover das favoritas' | t) : ('Guardar música' | t)
+              "
               (click)="toggleSaved(track)"
             >
               {{ track.liked ? '✓' : '+' }}
             </button>
           </div>
         } @empty {
-          <p class="empty-state">No tracks match this view.</p>
+          <div class="empty-mix">
+            <strong>{{ 'Ainda não há músicas aqui.' | t }}</strong>
+            <span>{{
+              mix.kind === 'rediscover' && !history.summary()
+                ? ('Importa o histórico para preencher esta mix.' | t)
+                : mix.kind === 'discovery'
+                  ? ('O Claude ainda não encontrou lançamentos deste ano que passem todos os filtros.'
+                    | t)
+                  : mix.kind === 'releases'
+                    ? ('Não foram encontrados lançamentos recentes destes artistas.' | t)
+                    : ('Atualiza as mixes quando o Spotify estiver ligado.' | t)
+            }}</span>
+          </div>
+        }
+      </div>
+    </section>
+  } @else if (navigation.view() === 'collection') {
+    <section class="collection-view" aria-labelledby="collection-title">
+      <header class="collection-header">
+        <button class="back-button" type="button" (click)="navigation.goHome()">
+          <span aria-hidden="true">←</span> {{ 'Início' | t }}
+        </button>
+        <span>{{
+          store.activeCollection() === 'recent' ? ('A tua atividade' | t) : ('Coleção' | t)
+        }}</span>
+        <h1 id="collection-title">{{ store.collectionTitle() | t }}</h1>
+        <p>{{ store.collectionDescription() | t }}</p>
+        <small>{{ store.filteredTracks().length }} {{ 'músicas' | t }}</small>
+      </header>
+
+      <div class="mix-track-head collection-track-head" aria-hidden="true">
+        <span>#</span><span>{{ 'Música' | t }}</span
+        ><span>{{ 'Álbum' | t }}</span
+        ><span>{{ 'Duração' | t }}</span
+        ><span></span>
+      </div>
+      <div class="mix-tracks">
+        @for (track of store.filteredTracks(); track track.id; let position = $index) {
+          <div
+            class="mix-track-row"
+            [class.mix-track-row--current]="track.id === store.currentTrackId()"
+            [attr.aria-current]="track.id === store.currentTrackId() ? 'true' : null"
+          >
+            <button class="track-position" type="button" (click)="play(track)">
+              @if (track.id === store.currentTrackId()) {
+                <i class="now-bars" [class.now-bars--paused]="!store.isPlaying()" aria-hidden="true"
+                  ><b></b><b></b><b></b
+                ></i>
+              }
+              <span>{{ position + 1 }}</span
+              ><app-icon name="play" [size]="12" />
+            </button>
+            <div class="track-identity">
+              <button class="track-cover-button" type="button" (click)="play(track)">
+                <app-artwork [artwork]="track.artwork" [size]="42" />
+              </button>
+              <span>
+                <button class="track-title-button" type="button" (click)="play(track)">
+                  {{ track.title }}
+                </button>
+                <button class="track-link-button" type="button" (click)="openArtist(track.artist)">
+                  {{ track.artist }}
+                </button>
+              </span>
+            </div>
+            <button
+              class="track-album track-link-button"
+              type="button"
+              (click)="openAlbum(track.album)"
+            >
+              {{ track.album }}
+            </button>
+            <time>{{ formatDuration(track.durationSeconds) }}</time>
+            <button
+              class="save-button"
+              type="button"
+              [class.save-button--active]="track.liked"
+              [attr.aria-label]="
+                track.liked ? ('Remover das favoritas' | t) : ('Guardar música' | t)
+              "
+              (click)="toggleSaved(track)"
+            >
+              {{ track.liked ? '✓' : '+' }}
+            </button>
+          </div>
+        } @empty {
+          <div class="empty-mix">
+            <strong>{{ 'Nada por aqui.' | t }}</strong
+            ><span>{{ 'Esta coleção ainda não tem músicas disponíveis.' | t }}</span>
+          </div>
+        }
+      </div>
+    </section>
+  } @else {
+    <header class="page-header">
+      <div>
+        <h1>{{ greeting() }}</h1>
+        <p>{{ today() }}</p>
+      </div>
+      <div class="page-actions">
+        <button class="secondary-button" type="button" (click)="dataOpen.set(true)">
+          <app-icon name="history" [size]="15" /> {{ 'Os teus dados' | t }}
+        </button>
+        <button class="primary-button" type="button" (click)="createOpen.set(true)">
+          <app-icon name="plus" [size]="15" /> {{ 'Criar mix' | t }}
+        </button>
+      </div>
+    </header>
+
+    @if (!history.summary()) {
+      <section class="history-callout">
+        <div>
+          <strong>{{ 'Falta o teu histórico completo' | t }}</strong>
+          <span>{{
+            'Importa o ZIP do Spotify para o Queuer saber o que já ouviste. O ficheiro fica neste computador.'
+              | t
+          }}</span>
+        </div>
+        <button
+          class="secondary-button"
+          type="button"
+          [disabled]="history.importing()"
+          (click)="chooseHistoryFiles()"
+        >
+          {{ history.importing() ? ('A importar…' | t) : ('Importar ZIP' | t) }}
+        </button>
+      </section>
+    }
+
+    <section class="home-section" aria-labelledby="for-you-title">
+      <div class="section-title">
+        <h2 id="for-you-title">{{ 'Para ti' | t }}</h2>
+        <div>
+          @if (claude.status().configured) {
+            <span class="claude-state claude-state--active">{{ 'Claude configurado' | t }}</span>
+          } @else {
+            <button class="claude-state" type="button" (click)="createOpen.set(true)">
+              {{ 'Ligar Claude' | t }}
+            </button>
+          }
+          <span>{{ dailyUpdatedLabel() }}</span>
+          @if (integration.mode() === 'spotify') {
+            <button type="button" [disabled]="mixes.generating() !== null" (click)="refreshDaily()">
+              {{ 'Atualizar' | t }}
+            </button>
+          }
+        </div>
+      </div>
+
+      @if (mixes.error(); as error) {
+        <div class="mix-warning" role="status">
+          <span>
+            <strong>{{
+              hasPlayableDailyMixes()
+                ? ('A mostrar a última seleção válida.' | t)
+                : ('As Daily Mixes ainda não foram criadas.' | t)
+            }}</strong>
+            <small>{{ error | t }}</small>
+          </span>
+          <button type="button" [disabled]="mixes.generating() !== null" (click)="refreshDaily()">
+            {{ 'Tentar novamente' | t }}
+          </button>
+        </div>
+      }
+
+      @if (!mixes.error() && mixes.notice(); as notice) {
+        <p class="mix-notice" role="status">{{ notice | t }}</p>
+      }
+
+      <div class="featured-grid">
+        @for (mix of mixes.featuredMixes(); track mix.id) {
+          <article
+            class="featured-card"
+            (click)="openMix(mix)"
+            (keydown.enter)="openMix(mix)"
+            tabindex="0"
+          >
+            <app-mix-mosaic [mix]="mix" [size]="132" />
+            <div class="featured-card__body">
+              <div>
+                <h3>{{ mix.name | t }}</h3>
+                <p>{{ mix.tracks.length ? (mix.description | t) : emptyHint(mix) }}</p>
+              </div>
+              <div class="featured-card__meta">
+                <span>{{ mix.tracks.length }} {{ 'músicas' | t }}</span>
+                <button
+                  type="button"
+                  [attr.aria-label]="'Ouvir mix' | t"
+                  [disabled]="mix.tracks.length === 0"
+                  (click)="$event.stopPropagation(); playMix(mix)"
+                >
+                  <app-icon name="play" [size]="14" /> {{ 'Ouvir' | t }}
+                </button>
+              </div>
+            </div>
+          </article>
+        }
+      </div>
+    </section>
+
+    <section class="home-section" aria-labelledby="daily-title">
+      <div class="section-title">
+        <h2 id="daily-title">Daily Mixes</h2>
+        <span>{{ '50 músicas por mix' | t }}</span>
+      </div>
+      <div class="daily-grid">
+        @for (mix of mixes.dailyMixes(); track mix.id) {
+          <ng-container
+            [ngTemplateOutlet]="mixCard"
+            [ngTemplateOutletContext]="{ $implicit: mix }"
+          />
+        }
+      </div>
+    </section>
+
+    @if (mixes.memoryMixes().length) {
+      <section class="home-section" aria-labelledby="memory-title">
+        <div class="section-title">
+          <h2 id="memory-title">{{ 'De volta à rotação' | t }}</h2>
+          <span>{{ 'Familiar, sem contar como Daily Mix' | t }}</span>
+        </div>
+        <div class="daily-grid daily-grid--memory">
+          @for (mix of mixes.memoryMixes(); track mix.id) {
+            <ng-container
+              [ngTemplateOutlet]="mixCard"
+              [ngTemplateOutletContext]="{ $implicit: mix }"
+            />
+          }
+        </div>
+      </section>
+    }
+
+    <section class="home-section" aria-labelledby="library-title">
+      <div class="section-title">
+        <h2 id="library-title">{{ 'A tua biblioteca' | t }}</h2>
+        <span>{{ store.playlists().length }} playlists</span>
+      </div>
+      <div class="library-grid">
+        <button
+          class="library-card library-card--liked"
+          type="button"
+          (click)="navigation.openCollection('liked')"
+        >
+          <span class="library-liked-icon"><app-icon name="heart" [size]="18" /></span>
+          <span
+            ><strong>{{ 'Favoritas' | t }}</strong
+            ><small>{{ likedCount() }} {{ 'músicas' | t }}</small></span
+          >
+          <span aria-hidden="true">→</span>
+        </button>
+        @for (playlist of store.playlists().slice(0, 5); track playlist.id) {
+          <button
+            class="library-card"
+            type="button"
+            (click)="navigation.openCollection(playlist.id)"
+          >
+            <app-artwork [artwork]="playlist.artwork" [size]="50" />
+            <span
+              ><strong>{{ playlist.name }}</strong
+              ><small>{{ playlist.trackCount }} {{ 'músicas' | t }}</small></span
+            >
+            <span aria-hidden="true">→</span>
+          </button>
+        }
+      </div>
+    </section>
+
+    <section class="home-section" aria-labelledby="recent-title">
+      <div class="section-title">
+        <h2 id="recent-title">{{ 'Ouvidas recentemente' | t }}</h2>
+        <button type="button" (click)="navigation.openCollection('recent')">
+          {{ 'Ver histórico' | t }}
+        </button>
+      </div>
+      <div class="recent-list">
+        @for (track of recentTracks(); track track.id) {
+          <button
+            class="recent-row"
+            type="button"
+            [class.recent-row--current]="track.id === store.currentTrackId()"
+            (click)="play(track)"
+          >
+            <app-artwork [artwork]="track.artwork" [size]="42" />
+            <span
+              ><strong>{{ track.title }}</strong
+              ><small>{{ track.artist }}</small></span
+            >
+            <span>{{ track.album }}</span>
+            <time>{{ formatDuration(track.durationSeconds) }}</time>
+            <app-icon name="play" [size]="13" />
+          </button>
         }
       </div>
     </section>
   }
 
-  @if (integration.syncing()) {
-    <div class="sync-overlay" aria-live="polite"><span></span> Loading Spotify data…</div>
+  @if (mixes.generating(); as generation) {
+    <div class="generation-status" role="status">
+      <i></i
+      ><span
+        ><strong>{{
+          (generation === 'custom' ? 'A preparar a tua mix' : 'A preparar as mixes de hoje') | t
+        }}</strong
+        ><small>{{ mixes.generationDetail() | t }}</small></span
+      >
+    </div>
   }
 </main>
+
+@if (createOpen()) {
+  <div class="modal-backdrop" (mousedown)="createOpen.set(false)">
+    <section
+      class="dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="create-title"
+      (mousedown)="$event.stopPropagation()"
+    >
+      <header>
+        <div>
+          <span>{{ 'Nova seleção' | t }}</span>
+          <h2 id="create-title">{{ 'Criar uma mix' | t }}</h2>
+        </div>
+        <button
+          class="icon-button"
+          type="button"
+          [attr.aria-label]="'Fechar' | t"
+          (click)="createOpen.set(false)"
+        >
+          <app-icon name="close" [size]="16" />
+        </button>
+      </header>
+
+      @if (!claude.status().configured) {
+        <div class="api-setup">
+          <div>
+            <strong>{{ 'Ligar o Claude' | t }}</strong
+            ><span>{{
+              'A chave é guardada no cofre do Windows. Para as Daily Mixes, o Claude recebe um perfil musical agregado; nunca recebe o ZIP bruto, IPs ou dados do dispositivo.'
+                | t
+            }}</span>
+          </div>
+          <label
+            ><span>Anthropic API key</span
+            ><input
+              type="password"
+              autocomplete="off"
+              placeholder="sk-ant-…"
+              [value]="apiKeyInput()"
+              (input)="updateSignal('key', $event)"
+          /></label>
+          @if (claude.error(); as error) {
+            <p class="field-error">{{ error | t }}</p>
+          }
+          <button
+            class="secondary-button"
+            type="button"
+            [disabled]="claude.busy() || apiKeyInput().length < 20"
+            (click)="configureClaude()"
+          >
+            {{ 'Guardar chave' | t }}
+          </button>
+        </div>
+      } @else {
+        <label class="form-field"
+          ><span>{{ 'Nome' | t }}</span
+          ><input
+            type="text"
+            maxlength="60"
+            [placeholder]="'Noite lenta' | t"
+            [value]="mixName()"
+            (input)="updateSignal('name', $event)"
+        /></label>
+        <label class="form-field"
+          ><span>{{ 'O que queres ouvir?' | t }}</span
+          ><textarea
+            rows="4"
+            maxlength="2000"
+            [placeholder]="
+              'Algo parecido com Radiohead e James Blake, mais eletrónico, melancólico e sem escolhas óbvias.'
+                | t
+            "
+            [value]="mixPrompt()"
+            (input)="updateSignal('prompt', $event)"
+          ></textarea
+          ><small>{{
+            'Escreve como falarias com alguém que conhece muita música.' | t
+          }}</small></label
+        >
+        <label class="form-field"
+          ><span>{{ 'Artistas de referência' | t }}</span
+          ><input
+            type="text"
+            placeholder="Radiohead, James Blake, Burial"
+            [value]="mixSeeds()"
+            (input)="updateSignal('seeds', $event)"
+          /><small>{{
+            'Opcional. Estes nomes são escritos por ti e são a única referência enviada ao Claude.'
+              | t
+          }}</small></label
+        >
+        <div class="count-choice">
+          <span>{{ 'Tamanho' | t }}</span>
+          <div>
+            <button type="button" [class.active]="mixCount() === 50" (click)="mixCount.set(50)">
+              {{ '50 músicas' | t }}</button
+            ><button type="button" [class.active]="mixCount() === 100" (click)="mixCount.set(100)">
+              {{ '100 músicas' | t }}
+            </button>
+          </div>
+        </div>
+        <footer>
+          <span>{{
+            'As sugestões são confirmadas no Spotify e cruzadas localmente com o teu histórico.' | t
+          }}</span
+          ><button
+            class="primary-button"
+            type="button"
+            [disabled]="mixPrompt().trim().length < 5 || mixes.generating() !== null"
+            (click)="createCustomMix()"
+          >
+            {{ 'Criar mix' | t }}
+          </button>
+        </footer>
+      }
+    </section>
+  </div>
+}
+
+@if (dataOpen()) {
+  <div class="modal-backdrop" (mousedown)="dataOpen.set(false)">
+    <section
+      class="dialog data-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="data-title"
+      (mousedown)="$event.stopPropagation()"
+    >
+      <header>
+        <div>
+          <span>{{ 'Controlo dos teus dados' | t }}</span>
+          <h2 id="data-title">{{ 'Os teus dados' | t }}</h2>
+        </div>
+        <button
+          class="icon-button"
+          type="button"
+          [attr.aria-label]="'Fechar' | t"
+          (click)="dataOpen.set(false)"
+        >
+          <app-icon name="close" [size]="16" />
+        </button>
+      </header>
+      @if (history.summary(); as summary) {
+        <div class="history-stats">
+          <div>
+            <strong>{{ summary.playCount.toLocaleString(i18n.locale()) }}</strong
+            ><span>{{ 'reproduções' | t }}</span>
+          </div>
+          <div>
+            <strong>{{ summary.distinctTrackCount.toLocaleString(i18n.locale()) }}</strong
+            ><span>{{ 'músicas' | t }}</span>
+          </div>
+          <div>
+            <strong>{{ summary.totalHours.toLocaleString(i18n.locale()) }}</strong
+            ><span>{{ 'horas' | t }}</span>
+          </div>
+          <div>
+            <strong>{{ history.prototypes().length }}</strong
+            ><span>{{ 'receitas de mix' | t }}</span>
+          </div>
+        </div>
+        <div class="top-artists">
+          <span>{{ 'Mais ouvidos' | t }}</span>
+          @for (
+            artist of summary.topArtists.slice(0, 8);
+            track artist.name;
+            let position = $index
+          ) {
+            <div>
+              <i>{{ position + 1 }}</i
+              ><strong>{{ artist.name }}</strong
+              ><small
+                >{{ artist.plays.toLocaleString(i18n.locale()) }} {{ 'reproduções' | t }}</small
+              >
+            </div>
+          }
+        </div>
+        <p class="privacy-note">
+          <app-icon name="lock" [size]="14" />
+          {{
+            'O ZIP bruto e o índice completo ficam neste computador. Para criar as quatro Daily Mixes, o Queuer envia ao Claude um dossier musical agregado: artistas, faixas, frequência, recência e as 200 receitas. IPs, dispositivos e outros metadados de reprodução nunca são enviados.'
+              | t
+          }}
+        </p>
+      } @else {
+        <div class="data-empty">
+          <strong>{{ 'Ainda não importaste o histórico.' | t }}</strong
+          ><span>{{
+            'Aceitamos o ZIP completo ou vários ficheiros JSON, antigos ou novos.' | t
+          }}</span
+          ><button
+            class="primary-button"
+            type="button"
+            (click)="chooseHistoryFiles(); dataOpen.set(false)"
+          >
+            {{ 'Escolher ficheiros' | t }}
+          </button>
+        </div>
+      }
+      @if (history.summary()) {
+        <button class="secondary-button full-button" type="button" (click)="chooseHistoryFiles()">
+          {{ 'Substituir importação' | t }}
+        </button>
+      }
+    </section>
+  </div>
+}
+
+@if (integration.syncing()) {
+  <div class="sync-overlay" aria-live="polite"><span></span> {{ 'A carregar o Spotify…' | t }}</div>
+}

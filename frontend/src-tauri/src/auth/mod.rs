@@ -11,7 +11,7 @@ use std::{
 };
 
 use reqwest::{Client, StatusCode};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 use tokio::{
     net::TcpListener,
@@ -30,11 +30,12 @@ use vault::CredentialVault;
 const AUTHORIZE_URL: &str = "https://accounts.spotify.com/authorize";
 const TOKEN_URL: &str = "https://accounts.spotify.com/api/token";
 const PROFILE_URL: &str = "https://api.spotify.com/v1/me";
+const SEARCH_PROBE_URL: &str = "https://api.spotify.com/v1/search?q=a&type=track&limit=1";
 const CALLBACK_PORT: u16 = 43_821;
 const REDIRECT_REGISTRATION: &str = "http://127.0.0.1:43821/callback";
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const REFRESH_EARLY_SECONDS: u64 = 60;
-const SCOPES: [&str; 11] = [
+const SCOPES: [&str; 14] = [
     "user-read-private",
     "user-read-email",
     "streaming",
@@ -46,6 +47,9 @@ const SCOPES: [&str; 11] = [
     "user-library-read",
     "user-library-modify",
     "user-read-recently-played",
+    "user-top-read",
+    "playlist-modify-private",
+    "playlist-modify-public",
 ];
 
 struct AccessTokenRecord {
@@ -356,6 +360,27 @@ impl SpotifyAuth {
         })
     }
 
+    async fn probe_search_rate_limit(&self) -> Result<RateLimitProbe, AuthError> {
+        let grant = self.access_token(None).await?;
+        let access_token = Zeroizing::new(grant.access_token);
+        let response = self
+            .client
+            .get(SEARCH_PROBE_URL)
+            .bearer_auth(access_token.as_str())
+            .send()
+            .await
+            .map_err(|_| AuthError::SpotifyApiFailed)?;
+        let retry_after_seconds = response
+            .headers()
+            .get(reqwest::header::RETRY_AFTER)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.trim().parse::<u64>().ok());
+        Ok(RateLimitProbe {
+            status: response.status().as_u16(),
+            retry_after_seconds,
+        })
+    }
+
     async fn fetch_profile(&self) -> Result<SpotifyProfile, AuthError> {
         let grant = self.access_token(None).await?;
         let access_token = Zeroizing::new(grant.access_token);
@@ -609,6 +634,21 @@ pub(crate) async fn spotify_get_valid_access_token(
         .map_err(CommandError::from)
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RateLimitProbe {
+    status: u16,
+    retry_after_seconds: Option<u64>,
+}
+
+#[tauri::command]
+pub(crate) async fn spotify_probe_rate_limit(
+    auth: State<'_, Arc<SpotifyAuth>>,
+) -> Result<RateLimitProbe, CommandError> {
+    auth.probe_search_rate_limit()
+        .await
+        .map_err(CommandError::from)
+}
 #[tauri::command]
 pub(crate) async fn spotify_get_profile(
     auth: State<'_, Arc<SpotifyAuth>>,

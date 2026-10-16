@@ -7,7 +7,7 @@
       aria-labelledby="palette-title"
       (mousedown)="$event.stopPropagation()"
     >
-      <h2 id="palette-title" class="sr-only">Command palette</h2>
+      <h2 id="palette-title" class="sr-only">{{ 'Pesquisa e comandos' | t }}</h2>
       <label class="palette__search">
         <app-icon name="command" [size]="19" />
         <input
@@ -15,7 +15,7 @@
           type="text"
           autocomplete="off"
           spellcheck="false"
-          placeholder="Run a command or search music…"
+          [placeholder]="'Pesquisa música ou executa um comando…' | t"
           [value]="store.commandQuery()"
           aria-controls="command-results"
           [attr.aria-activedescendant]="'palette-option-' + selectedIndex()"
@@ -23,14 +23,14 @@
           (keydown)="handleKeydown($event)"
         />
         @if (integration.searching()) {
-          <span class="palette__spinner" aria-label="Searching Spotify"></span>
+          <span class="palette__spinner" [attr.aria-label]="'A pesquisar no Spotify' | t"></span>
         }
         <kbd>ESC</kbd>
       </label>
 
       <div id="command-results" class="palette__results" role="listbox">
         @if (visibleCommands().length > 0) {
-          <p>Commands</p>
+          <p>{{ 'Comandos' | t }}</p>
           @for (command of visibleCommands(); track command.id; let index = $index) {
             <button
               [id]="'palette-option-' + index"
@@ -45,8 +45,8 @@
                 ><app-icon [name]="command.icon" [size]="16"
               /></span>
               <span class="palette-option__copy"
-                ><strong>{{ command.label }}</strong
-                ><small>{{ command.hint }}</small></span
+                ><strong>{{ command.label | t }}</strong
+                ><small>{{ command.hint | t }}</small></span
               >
               @if (command.shortcut) {
                 <kbd>{{ command.shortcut }}</kbd>
@@ -56,7 +56,11 @@
         }
 
         @if (visibleTracks().length > 0) {
-          <p>{{ integration.mode() === 'spotify' ? 'Music' : 'Demo tracks' }}</p>
+          <p>
+            {{
+              integration.mode() === 'spotify' ? ('Música' | t) : ('Músicas de demonstração' | t)
+            }}
+          </p>
           @for (track of visibleTracks(); track track.id; let trackIndex = $index) {
             @let optionIndex = visibleCommands().length + trackIndex;
             <button
@@ -82,17 +86,17 @@
           visibleCommands().length === 0 && visibleTracks().length === 0 && !integration.searching()
         ) {
           <div class="palette__empty">
-            <app-icon name="search" [size]="20" /><strong>No results</strong
-            ><small>Try a track, artist, album, or command.</small>
+            <app-icon name="search" [size]="20" /><strong>{{ 'Sem resultados' | t }}</strong
+            ><small>{{ 'Tenta uma música, artista, álbum ou comando.' | t }}</small>
           </div>
         }
       </div>
 
       <footer class="palette__footer">
-        <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
-        <span><kbd>↵</kbd> Open</span>
+        <span><kbd>↑</kbd><kbd>↓</kbd> {{ 'Navegar' | t }}</span>
+        <span><kbd>↵</kbd> {{ 'Abrir' | t }}</span>
         <span class="palette__source">{{
-          integration.mode() === 'spotify' ? 'Spotify' : 'Demo'
+          integration.mode() === 'spotify' ? 'Spotify' : 'Local'
         }}</span>
       </footer>
     </section>

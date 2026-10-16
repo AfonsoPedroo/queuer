@@ -15,15 +15,20 @@ import {
   UserProfile,
 } from '../models/music.models';
 
+const VOLUME_KEY = 'queuer.player-volume.v1';
+const DEFAULT_VOLUME = 72;
+
 @Injectable({ providedIn: 'root' })
 export class MusicShellStore {
+  private readonly initialVolume = this.readStoredVolume();
   private readonly tracksState = signal<readonly Track[]>(DEMO_TRACKS);
   private readonly playlistsState = signal<readonly Playlist[]>(DEMO_PLAYLISTS);
   private readonly queueIdsState = signal<readonly string[]>(DEMO_QUEUE_IDS);
   private readonly recentTrackIdsState = signal<readonly string[]>(DEMO_RECENT_TRACK_IDS);
   private readonly historyIdsState = signal<readonly string[]>([]);
   private toastTimer: ReturnType<typeof setTimeout> | undefined;
-  private previousVolume = 72;
+  private previousVolume = this.initialVolume && this.initialVolume > 0 ? this.initialVolume : 60;
+  private hasSavedVolume = this.initialVolume !== null;
 
   readonly query = signal('');
   readonly activeCollection = signal('home');
@@ -32,13 +37,13 @@ export class MusicShellStore {
   readonly profile = signal<UserProfile | null>(null);
   readonly devices = signal<readonly PlaybackDevice[]>([]);
   readonly isPlaying = signal(false);
+  readonly playbackContextId = signal<string | null>(null);
   readonly progressSeconds = signal(74);
-  readonly volume = signal(72);
+  readonly volume = signal(this.initialVolume ?? DEFAULT_VOLUME);
   readonly shuffleEnabled = signal(false);
   readonly repeatMode = signal<RepeatMode>('off');
   readonly commandOpen = signal(false);
   readonly commandQuery = signal('');
-  readonly focusSearchRequest = signal(0);
   readonly toast = signal<ToastMessage | null>(null);
 
   readonly tracks = this.tracksState.asReadonly();
@@ -54,26 +59,35 @@ export class MusicShellStore {
       .map((id) => this.trackMap().get(id))
       .filter((track): track is Track => track !== undefined),
   );
+  readonly recentTracks = computed(() =>
+    this.recentTrackIdsState()
+      .map((id) => this.trackMap().get(id))
+      .filter((track): track is Track => track !== undefined),
+  );
 
   readonly collectionTitle = computed(() => {
     const collection = this.activeCollection();
-    if (collection === 'home') return 'Home';
-    if (collection === 'liked') return 'Liked Songs';
-    if (collection === 'recent') return 'Recently Played';
+    if (collection === 'home') return 'Início';
+    if (collection === 'liked') return 'Favoritas';
+    if (collection === 'recent') return 'Ouvidas recentemente';
+    if (collection.startsWith('artist:')) return this.dynamicCollectionName(collection, 'artist:');
+    if (collection.startsWith('album:')) return this.dynamicCollectionName(collection, 'album:');
     return this.playlists().find((playlist) => playlist.id === collection)?.name ?? 'Playlist';
   });
 
   readonly collectionDescription = computed(() => {
     const collection = this.activeCollection();
-    if (collection === 'liked') return 'The tracks you marked with Spotify’s save action.';
+    if (collection === 'liked') return 'As músicas que guardaste na tua biblioteca.';
     if (collection === 'recent') {
       return this.sourceMode() === 'demo'
-        ? 'Demo listening history.'
-        : 'Recently loaded listening activity from your Spotify account.';
+        ? 'Histórico de audição da demonstração.'
+        : 'A atividade recente carregada da tua conta Spotify.';
     }
+    if (collection.startsWith('artist:')) return 'Músicas deste artista encontradas no Spotify.';
+    if (collection.startsWith('album:')) return 'Músicas deste álbum encontradas no Spotify.';
     return (
       this.playlists().find((playlist) => playlist.id === collection)?.description ??
-      'Tracks from this playlist.'
+      'Músicas desta playlist.'
     );
   });
 
@@ -89,6 +103,16 @@ export class MusicShellStore {
         activeCollection === 'home' ||
         (activeCollection === 'recent' && recentTrackOrder.has(track.id)) ||
         (activeCollection === 'liked' && track.liked) ||
+        (activeCollection.startsWith('artist:') &&
+          track.artist
+            .split(',')
+            .map((artist) => artist.trim().toLocaleLowerCase())
+            .includes(
+              this.dynamicCollectionName(activeCollection, 'artist:').toLocaleLowerCase(),
+            )) ||
+        (activeCollection.startsWith('album:') &&
+          track.album.toLocaleLowerCase() ===
+            this.dynamicCollectionName(activeCollection, 'album:').toLocaleLowerCase()) ||
         track.playlistIds.includes(activeCollection);
       const searchable =
         `${track.title} ${track.artist} ${track.album} ${track.tags.join(' ')}`.toLocaleLowerCase();
@@ -125,7 +149,9 @@ export class MusicShellStore {
     this.currentTrackId.set(snapshot.currentTrack?.id ?? '');
     this.isPlaying.set(snapshot.isPlaying);
     this.progressSeconds.set(snapshot.progressSeconds);
-    this.volume.set(snapshot.volume ?? 72);
+    if (!this.hasSavedVolume && snapshot.volume !== null) {
+      this.applyVolume(snapshot.volume, true);
+    }
     this.shuffleEnabled.set(snapshot.shuffleEnabled);
     this.repeatMode.set(snapshot.repeatMode);
     this.activeCollection.set('home');
@@ -142,7 +168,6 @@ export class MusicShellStore {
     this.currentTrackId.set(DEMO_TRACKS[0].id);
     this.isPlaying.set(false);
     this.progressSeconds.set(74);
-    this.volume.set(72);
     this.shuffleEnabled.set(false);
     this.repeatMode.set('off');
     this.activeCollection.set('home');
@@ -173,7 +198,9 @@ export class MusicShellStore {
     }
     if (update.isPlaying !== undefined) this.isPlaying.set(update.isPlaying);
     if (update.progressSeconds !== undefined) this.progressSeconds.set(update.progressSeconds);
-    if (update.volume !== undefined && update.volume !== null) this.volume.set(update.volume);
+    if (!this.hasSavedVolume && update.volume !== undefined && update.volume !== null) {
+      this.applyVolume(update.volume, true);
+    }
     if (update.shuffleEnabled !== undefined) this.shuffleEnabled.set(update.shuffleEnabled);
     if (update.repeatMode !== undefined) this.repeatMode.set(update.repeatMode);
     if (update.devices !== undefined) this.devices.set(update.devices);
@@ -212,6 +239,28 @@ export class MusicShellStore {
     this.isPlaying.set(true);
   }
 
+  registerTracks(tracks: readonly Track[]): void {
+    this.tracksState.update((current) => {
+      const merged = new Map(current.map((track) => [track.id, track]));
+      for (const track of tracks) merged.set(track.id, { ...merged.get(track.id), ...track });
+      return [...merged.values()];
+    });
+  }
+
+  playSequence(trackIds: readonly string[]): void {
+    const [firstId, ...queueIds] = trackIds;
+    if (!firstId) return;
+    this.queueIdsState.set(queueIds);
+    this.playTrack(firstId);
+  }
+
+  appendToQueue(trackIds: readonly string[]): void {
+    this.queueIdsState.update((queue) => [
+      ...queue,
+      ...trackIds.filter((id) => !queue.includes(id)),
+    ]);
+  }
+
   togglePlayback(): void {
     this.isPlaying.update((playing) => !playing);
   }
@@ -219,7 +268,7 @@ export class MusicShellStore {
   playNext(): void {
     const [nextId, ...remainingIds] = this.queueIds();
     if (!nextId) {
-      this.showToast('Queue finished', 'Add another track to keep listening.');
+      this.showToast('A fila terminou', 'Adiciona outra música para continuar.');
       return;
     }
     this.queueIdsState.set(remainingIds);
@@ -252,14 +301,14 @@ export class MusicShellStore {
   setVolume(value: number): void {
     const safeVolume = Math.min(100, Math.max(0, Math.round(value)));
     if (safeVolume > 0) this.previousVolume = safeVolume;
-    this.volume.set(safeVolume);
+    this.applyVolume(safeVolume, true);
   }
 
   toggleMute(): void {
-    if (this.volume() === 0) this.volume.set(this.previousVolume || 60);
+    if (this.volume() === 0) this.applyVolume(this.previousVolume || 60, true);
     else {
       this.previousVolume = this.volume();
-      this.volume.set(0);
+      this.applyVolume(0, true);
     }
   }
 
@@ -281,7 +330,7 @@ export class MusicShellStore {
         return { ...track, liked: nowLiked };
       }),
     );
-    this.showToast(nowLiked ? 'Added to Liked Songs' : 'Removed from Liked Songs');
+    this.showToast(nowLiked ? 'Guardada nas favoritas' : 'Removida das favoritas');
   }
 
   setTrackLiked(trackId: string, liked: boolean): void {
@@ -309,11 +358,11 @@ export class MusicShellStore {
 
   addTrackNext(trackId: string): void {
     this.queueIdsState.update((queue) => [trackId, ...queue.filter((id) => id !== trackId)]);
-    this.showToast('Playing next', this.trackMap().get(trackId)?.title);
+    this.showToast('Toca a seguir', this.trackMap().get(trackId)?.title);
   }
 
   showSpotifyUnavailable(): void {
-    this.showToast('Spotify is not connected', 'This demo never opens fictional Spotify links.');
+    this.showToast('O Spotify não está ligado', 'A demonstração não abre ligações fictícias.');
   }
 
   openCommandPalette(): void {
@@ -327,8 +376,7 @@ export class MusicShellStore {
   }
 
   requestSearchFocus(): void {
-    this.closeCommandPalette();
-    this.focusSearchRequest.update((request) => request + 1);
+    this.openCommandPalette();
   }
 
   closeOverlays(): void {
@@ -345,5 +393,34 @@ export class MusicShellStore {
   dismissToast(): void {
     if (this.toastTimer) clearTimeout(this.toastTimer);
     this.toast.set(null);
+  }
+
+  private dynamicCollectionName(collectionId: string, prefix: string): string {
+    try {
+      return decodeURIComponent(collectionId.slice(prefix.length));
+    } catch {
+      return collectionId.slice(prefix.length);
+    }
+  }
+
+  private applyVolume(value: number, persist: boolean): void {
+    const safeVolume = Math.min(100, Math.max(0, Math.round(value)));
+    this.volume.set(safeVolume);
+    if (!persist) return;
+    this.hasSavedVolume = true;
+    try {
+      localStorage.setItem(VOLUME_KEY, String(safeVolume));
+    } catch {}
+  }
+
+  private readStoredVolume(): number | null {
+    try {
+      const raw = localStorage.getItem(VOLUME_KEY);
+      if (raw === null) return null;
+      const value = Number(raw);
+      return Number.isFinite(value) && value >= 0 && value <= 100 ? Math.round(value) : null;
+    } catch {
+      return null;
+    }
   }
 }

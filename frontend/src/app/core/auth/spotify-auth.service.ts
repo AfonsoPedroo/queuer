@@ -102,6 +102,16 @@ export class SpotifyAuthService {
     }
   }
 
+  async probeRateLimit(): Promise<number | null> {
+    if (!this.isDesktop()) return null;
+    try {
+      const probe = await invoke<{ retryAfterSeconds: number | null }>('spotify_probe_rate_limit');
+      return probe.retryAfterSeconds;
+    } catch {
+      return null;
+    }
+  }
+
   async getAccessToken(): Promise<AccessTokenGrant> {
     if (!this.isDesktop()) {
       throw new Error('desktop_required');

@@ -9,9 +9,14 @@
     <header>
       <div class="auth-panel__icon"><app-icon name="lock" [size]="20" /></div>
       <div>
-        <h2 id="auth-title">Spotify connection</h2>
+        <h2 id="auth-title">{{ 'Ligação ao Spotify' | t }}</h2>
       </div>
-      <button class="icon-button" type="button" aria-label="Close" (click)="closed.emit()">
+      <button
+        class="icon-button"
+        type="button"
+        [attr.aria-label]="'Fechar' | t"
+        (click)="closed.emit()"
+      >
         <app-icon name="close" [size]="17" />
       </button>
     </header>
@@ -20,10 +25,12 @@
       <div class="auth-message auth-message--warning">
         <app-icon name="device" [size]="18" />
         <div>
-          <strong>Desktop application required</strong>
+          <strong>{{ 'É necessária a aplicação desktop' | t }}</strong>
           <p>
-            This authentication flow intentionally runs only inside Tauri, where the refresh token
-            can use the operating-system credential vault.
+            {{
+              'Esta autenticação funciona apenas na aplicação desktop, onde a sessão pode ficar protegida no cofre de credenciais do sistema.'
+                | t
+            }}
           </p>
         </div>
       </div>
@@ -37,79 +44,77 @@
           }
         </span>
         <div>
-          <span>Connected</span><strong>{{ auth.displayName() }}</strong
-          ><small>Access token in memory · refresh token in Windows Credential Manager</small>
+          <span>{{ 'Ligado' | t }}</span
+          ><strong>{{ auth.displayName() }}</strong
+          ><small>{{ 'Acesso em memória · sessão no Gestor de Credenciais do Windows' | t }}</small>
         </div>
         <i></i>
       </div>
 
       <dl class="session-details">
         <div>
-          <dt>Status</dt>
-          <dd>{{ phaseLabel() }}</dd>
+          <dt>{{ 'Estado' | t }}</dt>
+          <dd>{{ phaseLabel() | t }}</dd>
         </div>
         <div>
-          <dt>Permissions</dt>
-          <dd>{{ auth.status().scopes.length }} scoped capabilities</dd>
+          <dt>{{ 'Permissões' | t }}</dt>
+          <dd>{{ auth.status().scopes.length }} {{ 'capacidades autorizadas' | t }}</dd>
         </div>
         <div>
-          <dt>Token storage</dt>
-          <dd>Native OS vault</dd>
+          <dt>{{ 'Armazenamento' | t }}</dt>
+          <dd>{{ 'Cofre nativo do sistema' | t }}</dd>
         </div>
       </dl>
 
       <section class="playback-spike">
         <div class="playback-spike__heading">
-          <span><app-icon name="device" [size]="15" /> Playback in Queuer</span>
+          <span><app-icon name="device" [size]="15" /> {{ 'Reprodução no Queuer' | t }}</span>
           <em [class.playback-spike__status--ready]="playbackSdk.phase() === 'ready'">{{
-            playbackSdk.phase()
+            playbackLabel() | t
           }}</em>
         </div>
-        <p>{{ playbackSdk.message() }}</p>
-        <div>
+        <p>{{ playbackSdk.message() | t }}</p>
+        @if (
+          playbackSdk.phase() === 'error' ||
+          playbackSdk.phase() === 'notReady' ||
+          playbackSdk.phase() === 'unsupported'
+        ) {
           <button
             type="button"
             [disabled]="playbackSdk.phase() === 'loading' || playbackSdk.phase() === 'connecting'"
             (click)="playbackSdk.runCompatibilityTest()"
           >
-            {{ playbackSdk.phase() === 'idle' ? 'Enable playback in Queuer' : 'Initialize again' }}
+            {{ 'Tentar novamente' | t }}
           </button>
-          @if (playbackSdk.phase() === 'ready') {
-            <button
-              class="playback-spike__transfer"
-              type="button"
-              (click)="playbackSdk.transferPlaybackHere()"
-            >
-              Use Queuer for playback
-            </button>
-          }
-        </div>
+        }
       </section>
 
       <button class="danger-action" type="button" [disabled]="auth.busy()" (click)="disconnect()">
-        Sign out and remove saved Spotify session
+        {{ 'Terminar sessão e remover a ligação guardada' | t }}
       </button>
     } @else {
       <div class="setup-copy">
-        <h3>One-time application setup</h3>
+        <h3>{{ 'Configuração única' | t }}</h3>
         <p>
-          Create a Spotify Development Mode app, add yourself and your friends to its allowlist,
-          then paste its public Client ID. Never paste a Client Secret here.
+          {{
+            'Cria uma aplicação Spotify em Development Mode, adiciona as contas autorizadas e cola o Client ID público. Nunca coloques aqui um Client Secret.'
+              | t
+          }}
         </p>
       </div>
 
       <label class="field">
-        <span>Spotify Client ID</span>
+        <span>{{ 'Client ID do Spotify' | t }}</span>
         <input
           type="text"
           autocomplete="off"
           spellcheck="false"
-          placeholder="Paste the public Client ID"
+          [placeholder]="'Cola o Client ID público' | t"
           [value]="clientIdInput()"
           [disabled]="auth.busy()"
           (input)="updateClientId($event)"
         />
-        <small>Safe to embed in a desktop build; it is an identifier, not a secret.</small>
+        <small>{{ 'É apenas um identificador público, não é uma palavra-passe.' | t }}</small>
       </label>
 
       <div class="redirect-field">
@@ -117,19 +122,19 @@
         <code>{{ auth.status().redirectUriRegistration }}</code>
         <button type="button" (click)="copyRedirect()">
           <app-icon [name]="copied() ? 'check' : 'copy'" [size]="14" />
-          {{ copied() ? 'Copied' : 'Copy' }}
+          {{ copied() ? ('Copiado' | t) : ('Copiar' | t) }}
         </button>
-        <small
-          >Queuer listens on this fixed loopback port only while sign-in is in progress. The address
-          never leaves your computer.</small
-        >
+        <small>{{
+          'O Queuer usa esta porta local apenas enquanto a autenticação está aberta. O endereço não sai do teu computador.'
+            | t
+        }}</small>
       </div>
 
       @if (auth.error(); as error) {
         <div class="auth-error" role="alert">
           <app-icon name="warning" [size]="17" /><span
-            ><strong>{{ error.message }}</strong
-            ><small>Error code: {{ error.code }}</small></span
+            ><strong>{{ error.message | t }}</strong
+            ><small>{{ 'Código:' | t }} {{ error.code }}</small></span
           >
         </div>
       }
@@ -141,15 +146,15 @@
         (click)="connect()"
       >
         @if (auth.busy()) {
-          <span class="button-spinner"></span> {{ phaseLabel() }}
+          <span class="button-spinner"></span> {{ phaseLabel() | t }}
         } @else {
-          <app-icon name="external" [size]="16" /> Continue in system browser
+          <app-icon name="external" [size]="16" /> Continuar no browser
         }
       </button>
 
       @if (auth.status().phase === 'authorizing' || auth.status().phase === 'exchangingCode') {
         <button class="cancel-action" type="button" (click)="auth.cancelLogin()">
-          Cancel sign-in
+          {{ 'Cancelar ligação' | t }}
         </button>
       }
     }

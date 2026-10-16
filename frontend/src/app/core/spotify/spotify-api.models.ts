@@ -9,6 +9,7 @@ export interface SpotifyArtistDto {
   readonly name: string;
   readonly uri?: string;
   readonly external_urls?: { readonly spotify?: string };
+  readonly genres?: readonly string[];
 }
 
 export interface SpotifyTrackDto {
@@ -24,9 +25,49 @@ export interface SpotifyTrackDto {
     readonly name: string;
     readonly images?: readonly SpotifyImageDto[];
     readonly external_urls?: { readonly spotify?: string };
+    readonly release_date?: string;
   };
   readonly external_urls?: { readonly spotify?: string };
   readonly is_local?: boolean;
+  readonly is_playable?: boolean;
+  readonly restrictions?: { readonly reason?: string };
+  readonly linked_from?: { readonly id?: string; readonly uri?: string };
+}
+
+export interface SpotifyTopItemsPageDto {
+  readonly items: readonly SpotifyArtistDto[];
+  readonly total: number;
+  readonly next: string | null;
+}
+
+export interface SpotifyTopTracksPageDto {
+  readonly items: readonly SpotifyTrackDto[];
+  readonly total: number;
+  readonly next: string | null;
+}
+
+export interface SpotifyAlbumDto {
+  readonly id: string;
+  readonly name: string;
+  readonly uri: string;
+  readonly album_type?: string;
+  readonly release_date?: string;
+  readonly total_tracks?: number;
+  readonly images?: readonly SpotifyImageDto[];
+  readonly artists: readonly SpotifyArtistDto[];
+  readonly external_urls?: { readonly spotify?: string };
+}
+
+export interface SpotifyAlbumsPageDto {
+  readonly items: readonly SpotifyAlbumDto[];
+  readonly total: number;
+  readonly next: string | null;
+}
+
+export interface SpotifyAlbumTracksPageDto {
+  readonly items: readonly SpotifyTrackDto[];
+  readonly total: number;
+  readonly next: string | null;
 }
 
 export interface SpotifySavedTracksPageDto {

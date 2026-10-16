@@ -1,7 +1,8 @@
 import { Injectable, signal } from '@angular/core';
 import { SpotifyAuthService } from '../auth/spotify-auth.service';
 import { MusicShellStore } from '../state/music-shell.store';
-import { SpotifyIntegrationService } from './spotify-integration.service';
+import { SpotifyApiService } from './spotify-api.service';
+import { Track } from '../models/music.models';
 
 export type PlaybackSdkPhase =
   'idle' | 'loading' | 'connecting' | 'ready' | 'notReady' | 'unsupported' | 'error';
@@ -11,86 +12,149 @@ export class PlaybackSdkService {
   readonly phase = signal<PlaybackSdkPhase>('idle');
   readonly deviceId = signal<string | null>(null);
   readonly message = signal(
-    'Enable Queuer as a Spotify Connect device to play audio without another Spotify app.',
+    'O leitor integrado arranca automaticamente depois de ligares o Spotify.',
   );
 
   private player: SpotifyPlayer | null = null;
   private loadingPromise: Promise<void> | null = null;
+  private preparingPromise: Promise<void> | null = null;
+  private readyResolve: (() => void) | null = null;
+  private readyReject: ((error: Error) => void) | null = null;
 
   constructor(
     private readonly auth: SpotifyAuthService,
-    private readonly integration: SpotifyIntegrationService,
+    private readonly api: SpotifyApiService,
     private readonly store: MusicShellStore,
   ) {}
-  // Embedded playback stays opt-in because WebView2 DRM support varies between machines.
+
+  prepare(): Promise<void> {
+    if (this.phase() === 'ready' && this.player && this.deviceId()) return Promise.resolve();
+    this.preparingPromise ??= this.connectPlayer().finally(() => {
+      this.preparingPromise = null;
+    });
+    return this.preparingPromise;
+  }
+
   async runCompatibilityTest(): Promise<void> {
-    if (!this.auth.isDesktop() || !this.auth.authenticated()) {
-      this.phase.set('unsupported');
-      this.message.set('Connect a Premium Spotify account in the desktop app first.');
-      return;
+    this.disconnect();
+    try {
+      await this.prepare();
+    } catch {}
+  }
+
+  activateForUserGesture(): Promise<string | null> {
+    const player = this.player;
+    const deviceId = this.deviceId();
+
+    if (player && deviceId) {
+      const activation = player.activateElement();
+      return activation
+        .then(() => this.activateDevice(deviceId))
+        .catch(() => this.reportActivationFailure());
     }
 
-    this.disconnect();
+    return this.prepare()
+      .then(() => {
+        const preparedPlayer = this.player;
+        const preparedDeviceId = this.deviceId();
+        if (!preparedPlayer || !preparedDeviceId) return null;
+        return preparedPlayer.activateElement().then(() => this.activateDevice(preparedDeviceId));
+      })
+      .catch(() => this.reportActivationFailure());
+  }
+
+  async transferPlaybackHere(): Promise<void> {
+    await this.activateForUserGesture();
+  }
+
+  disconnect(): void {
+    this.readyReject?.(new Error('player_disconnected'));
+    this.readyResolve = null;
+    this.readyReject = null;
+    this.player?.disconnect();
+    this.player = null;
+    this.deviceId.set(null);
+    this.phase.set('idle');
+    this.message.set('O leitor integrado está desligado.');
+  }
+
+  private async connectPlayer(): Promise<void> {
+    if (!this.auth.isDesktop() || !this.auth.authenticated()) {
+      this.phase.set('unsupported');
+      this.message.set('Liga primeiro uma conta Spotify Premium.');
+      throw new Error('spotify_session_required');
+    }
+
     this.phase.set('loading');
-    this.message.set('Loading Spotify’s official Web Playback SDK…');
+    this.message.set('A preparar reprodução dentro do Queuer…');
     try {
       await this.loadSdk();
       const Spotify = window.Spotify;
       if (!Spotify) throw new Error('sdk_global_missing');
 
       this.phase.set('connecting');
-      this.message.set('Creating Queuer as a Spotify Connect playback device…');
+      const ready = new Promise<void>((resolve, reject) => {
+        this.readyResolve = resolve;
+        this.readyReject = reject;
+        window.setTimeout(() => reject(new Error('sdk_ready_timeout')), 15_000);
+      });
       const player = new Spotify.Player({
         name: 'Queuer',
-        volume: 0.72,
+        volume: this.store.volume() / 100,
         enableMediaSession: true,
         getOAuthToken: (callback) => {
           void this.auth
             .getAccessToken()
             .then((grant) => callback(grant.accessToken))
-            .catch(() => {
-              this.phase.set('error');
-              this.message.set('The SDK could not obtain a valid access token.');
-            });
+            .catch(() => this.fail('O leitor não conseguiu renovar a sessão do Spotify.'));
         },
       });
       this.player = player;
       this.attachListeners(player);
-      const connected = await player.connect();
-      if (!connected) {
-        this.phase.set('error');
-        this.message.set('The SDK loaded but could not connect to Spotify.');
+      if (!(await player.connect())) throw new Error('sdk_connect_failed');
+      await ready;
+    } catch (error: unknown) {
+      if (this.phase() !== 'unsupported') {
+        this.fail('O leitor integrado não ficou disponível neste computador.');
       }
-    } catch {
-      this.phase.set('error');
-      this.message.set('The official SDK could not initialize inside this WebView2 runtime.');
+      throw error;
+    } finally {
+      this.readyResolve = null;
+      this.readyReject = null;
     }
   }
 
-  async transferPlaybackHere(): Promise<void> {
-    const deviceId = this.deviceId();
-    const player = this.player;
-    if (!deviceId || !player) return;
-    try {
-      // WebView needs a real user interaction before it can play audio.
-      await player.activateElement();
-      const transferred = await this.integration.transferPlayback(deviceId);
-      if (!transferred) throw new Error('playback_transfer_failed');
-      this.message.set('Queuer is now the playback device. Choose a track to start listening.');
-    } catch {
-      this.phase.set('error');
-      this.message.set('Queuer could not activate its embedded Spotify playback device.');
-    }
+  private async activateDevice(deviceId: string): Promise<string> {
+    await this.api.transferPlayback(deviceId, false);
+    this.store.updateRemotePlayback({
+      devices: [
+        ...this.store
+          .devices()
+          .filter((device) => device.id !== deviceId)
+          .map((device) => ({ ...device, isActive: false })),
+        {
+          id: deviceId,
+          name: 'Queuer',
+          type: 'Computer',
+          isActive: true,
+          isRestricted: false,
+          volumePercent: this.store.volume(),
+        },
+      ],
+    });
+    this.phase.set('ready');
+    this.message.set('Pronto para tocar diretamente no Queuer.');
+    return deviceId;
   }
 
-  disconnect(): void {
-    this.player?.disconnect();
-    this.player = null;
-    this.deviceId.set(null);
-    if (this.phase() === 'ready') {
-      this.phase.set('idle');
-      this.message.set('Queuer playback disconnected.');
-    }
+  private reportActivationFailure(): null {
+    this.fail('O Queuer não conseguiu ativar o leitor integrado.');
+    return null;
+  }
+
+  private fail(message: string): void {
+    this.phase.set('error');
+    this.message.set(message);
   }
 
   private loadSdk(): Promise<void> {
@@ -130,40 +194,80 @@ export class PlaybackSdkService {
     player.addListener('ready', ({ device_id: deviceId }) => {
       this.deviceId.set(deviceId);
       this.phase.set('ready');
-      this.message.set(
-        'Queuer connected as a Spotify device. Activate it to confirm protected audio playback.',
-      );
+      this.message.set('Leitor preparado. O primeiro clique em Ouvir ativa-o automaticamente.');
+      this.readyResolve?.();
     });
     player.addListener('not_ready', () => {
+      this.deviceId.set(null);
       this.phase.set('notReady');
-      this.message.set('The Queuer playback device went offline.');
+      this.message.set('O leitor Queuer ficou temporariamente offline.');
     });
     player.addListener('initialization_error', () => {
-      this.phase.set('error');
-      this.message.set(
-        'This WebView2 runtime could not initialize Spotify protected playback (EME/DRM).',
-      );
+      const error = new Error('eme_not_supported');
+      this.fail('Este sistema não disponibilizou a proteção de áudio exigida pelo Spotify.');
+      this.readyReject?.(error);
     });
     player.addListener('authentication_error', () => {
-      this.phase.set('error');
-      this.message.set('Spotify rejected the SDK authentication token.');
+      const error = new Error('sdk_authentication_failed');
+      this.fail('O Spotify recusou a autenticação do leitor.');
+      this.readyReject?.(error);
     });
     player.addListener('account_error', () => {
+      const error = new Error('spotify_premium_required');
       this.phase.set('unsupported');
-      this.message.set('This playback path requires an eligible Spotify Premium account.');
+      this.message.set('A reprodução integrada requer Spotify Premium.');
+      this.readyReject?.(error);
     });
     player.addListener('playback_error', () => {
-      this.phase.set('error');
-      this.message.set('The SDK connected but WebView2 could not play this item.');
+      this.fail('O Spotify não conseguiu reproduzir esta música no Queuer.');
     });
     player.addListener('autoplay_failed', () => {
-      this.phase.set('error');
-      this.message.set('WebView2 blocked autoplay. Activate the Queuer player again.');
+      this.fail('O sistema bloqueou o áudio. Volta a carregar em Ouvir.');
     });
     player.addListener('player_state_changed', (state) => {
       if (!state) return;
-      this.store.isPlaying.set(!state.paused);
-      this.store.progressSeconds.set(Math.floor(state.position / 1_000));
+      this.store.updateRemotePlayback({
+        currentTrack: this.mapSdkTrack(state),
+        isPlaying: !state.paused,
+        progressSeconds: Math.floor(state.position / 1_000),
+        ...(state.shuffle === undefined ? {} : { shuffleEnabled: state.shuffle }),
+        ...(state.repeat_mode === undefined
+          ? {}
+          : {
+              repeatMode: state.repeat_mode === 2 ? 'one' : state.repeat_mode === 1 ? 'all' : 'off',
+            }),
+      });
     });
+  }
+
+  private mapSdkTrack(state: SpotifyPlayerState): Track | null {
+    const sdkTrack = state.track_window.current_track;
+    if (!sdkTrack.id) return null;
+    const existing = this.store.trackMap().get(sdkTrack.id);
+    const artworkUrl = sdkTrack.album.images[0]?.url;
+    const artist = sdkTrack.artists.map((item) => item.name).join(', ');
+    return {
+      id: sdkTrack.id,
+      title: sdkTrack.name,
+      artist,
+      ...(existing?.artistIds ? { artistIds: existing.artistIds } : {}),
+      album: sdkTrack.album.name,
+      durationSeconds: Math.round(sdkTrack.duration_ms / 1_000),
+      addedAt: existing?.addedAt ?? new Date().toISOString(),
+      artwork: artworkUrl
+        ? { source: 'spotify', url: artworkUrl, alt: `Capa de ${sdkTrack.album.name}` }
+        : (existing?.artwork ?? {
+            source: 'placeholder',
+            label: sdkTrack.album.name || sdkTrack.name,
+          }),
+      tags: existing?.tags ?? [],
+      playlistIds: existing?.playlistIds ?? [],
+      explicit: existing?.explicit ?? false,
+      spotifyUrl: existing?.spotifyUrl ?? `https://open.spotify.com/track/${sdkTrack.id}`,
+      uri: sdkTrack.uri,
+      liked: existing?.liked ?? false,
+      source: 'spotify',
+      ...(existing?.releaseDate ? { releaseDate: existing.releaseDate } : {}),
+    };
   }
 }

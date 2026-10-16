@@ -6,13 +6,14 @@ import {
   output,
   signal,
 } from '@angular/core';
+import { TranslatePipe } from '../../core/i18n/translate.pipe';
 import { PlaybackSdkService } from '../../core/spotify/playback-sdk.service';
 import { SpotifyIntegrationService } from '../../core/spotify/spotify-integration.service';
 import { UiIcon } from '../../shared/ui-icon/ui-icon';
 
 @Component({
   selector: 'app-auth-panel',
-  imports: [UiIcon],
+  imports: [TranslatePipe, UiIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './auth-panel.html',
   styleUrl: './auth-panel.scss',
@@ -30,21 +31,38 @@ export class AuthPanel {
   protected readonly phaseLabel = computed(() => {
     switch (this.auth.status().phase) {
       case 'authorizing':
-        return 'Waiting for your browser';
+        return 'À espera do browser';
       case 'exchangingCode':
-        return 'Completing secure exchange';
+        return 'A concluir a ligação segura';
       case 'refreshing':
-        return 'Refreshing session';
+        return 'A renovar a sessão';
       case 'authenticated':
-        return 'Connected';
+        return 'Ligado';
       case 'sessionAvailable':
-        return 'Saved session available';
+        return 'Sessão guardada disponível';
       case 'signedOut':
-        return 'Ready to connect';
+        return 'Pronto para ligar';
       case 'error':
-        return 'Needs attention';
+        return 'Precisa de atenção';
       default:
-        return 'Setup required';
+        return 'Configuração necessária';
+    }
+  });
+
+  protected readonly playbackLabel = computed(() => {
+    switch (this.playbackSdk.phase()) {
+      case 'ready':
+        return 'Pronto';
+      case 'loading':
+      case 'connecting':
+        return 'A preparar';
+      case 'error':
+      case 'notReady':
+        return 'Indisponível';
+      case 'unsupported':
+        return 'Não suportado';
+      default:
+        return 'A iniciar';
     }
   });
 

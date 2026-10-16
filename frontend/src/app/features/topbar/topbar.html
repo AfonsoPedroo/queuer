@@ -1,57 +1,79 @@
 <header class="topbar">
-  <div class="wordmark" aria-label="Queuer home">
+  <div class="history-nav" role="group" [attr.aria-label]="'Navegação' | t">
+    <button
+      type="button"
+      [attr.aria-label]="'Voltar' | t"
+      [disabled]="!navigation.canGoBack()"
+      (click)="navigation.back()"
+    >
+      ←
+    </button>
+    <button
+      type="button"
+      [attr.aria-label]="'Avançar' | t"
+      [disabled]="!navigation.canGoForward()"
+      (click)="navigation.forward()"
+    >
+      →
+    </button>
+  </div>
+  <button
+    class="wordmark"
+    type="button"
+    [attr.aria-label]="'Abrir início' | t"
+    (click)="navigation.goHome()"
+  >
     <span class="wordmark__mark" aria-hidden="true"></span>
     <strong>Queuer</strong>
-  </div>
+  </button>
 
-  <nav class="primary-modes" aria-label="Workspace views">
+  <nav class="primary-modes" [attr.aria-label]="'Vistas principais' | t">
     <button
       type="button"
       class="primary-modes__item"
-      [class.primary-modes__item--active]="store.activeCollection() === 'home'"
+      [class.primary-modes__item--active]="navigation.view() === 'home'"
       (click)="openCollection('home')"
     >
-      Home
+      {{ 'Início' | t }}
     </button>
     <button
       type="button"
       class="primary-modes__item"
-      [class.primary-modes__item--active]="store.activeCollection() === 'recent'"
+      [class.primary-modes__item--active]="
+        navigation.view() === 'collection' && store.activeCollection() === 'recent'
+      "
       (click)="openCollection('recent')"
     >
-      History
+      {{ 'Histórico' | t }}
     </button>
   </nav>
 
-  <label class="search-box">
-    <span class="sr-only">Filter the current tracks</span>
-    <input
-      #trackSearch
-      type="search"
-      autocomplete="off"
-      spellcheck="false"
-      placeholder="Go to album, artist, playlist…"
-      [value]="store.query()"
-      (input)="updateQuery($event)"
-    />
-    @if (store.query()) {
-      <button type="button" aria-label="Clear search" (click)="clearQuery()">
-        <app-icon name="close" [size]="13" />
-      </button>
-    } @else {
-      <kbd>⌘K</kbd>
-    }
-  </label>
+  <button class="search-box" type="button" (click)="store.openCommandPalette()">
+    <app-icon name="search" [size]="15" />
+    <span>{{ 'Pesquisar música, artistas e comandos' | t }}</span>
+    <kbd>Ctrl K</kbd>
+  </button>
 
   <div class="topbar__actions">
-    <span class="source-mode">{{ integration.mode() === 'spotify' ? 'Spotify' : 'Local' }}</span>
+    <button
+      class="settings-button"
+      type="button"
+      [attr.aria-label]="'Definições' | t"
+      [title]="'Definições' | t"
+      (click)="openSettings.emit()"
+    >
+      <app-icon name="settings" [size]="16" />
+    </button>
+    <span class="source-mode">{{
+      integration.mode() === 'spotify' ? 'Spotify' : ('Modo local' | t)
+    }}</span>
     <div class="device-control">
       <button
         class="device-button"
         type="button"
         [attr.aria-expanded]="deviceMenuOpen()"
-        [attr.aria-label]="store.activeDevice()?.name ?? 'Choose playback device'"
-        [title]="store.activeDevice()?.name ?? 'Choose playback device'"
+        [attr.aria-label]="store.activeDevice()?.name ?? ('Escolher dispositivo de reprodução' | t)"
+        [title]="store.activeDevice()?.name ?? ('Escolher dispositivo de reprodução' | t)"
         aria-haspopup="menu"
         (click)="deviceMenuOpen.update((open) => !open)"
       >
@@ -62,8 +84,8 @@
           <p>Spotify Connect</p>
           @if (store.devices().length === 0) {
             <div class="device-menu__empty">
-              <strong>No devices found</strong
-              ><small>Open Spotify on a phone, speaker, or computer.</small>
+              <strong>{{ 'Nenhum dispositivo' | t }}</strong
+              ><small>{{ 'Abre o Spotify num telemóvel, coluna ou computador.' | t }}</small>
             </div>
           } @else {
             @for (device of store.devices(); track device.id) {
@@ -91,7 +113,9 @@
     <button class="account-button" type="button" (click)="openAccount.emit()">
       <span class="account-button__copy"
         ><strong>{{ store.profile()?.displayName ?? 'Demo' }}</strong
-        ><small>{{ integration.mode() === 'spotify' ? 'connected' : 'offline' }}</small></span
+        ><small>{{
+          integration.mode() === 'spotify' ? ('ligado' | t) : ('offline' | t)
+        }}</small></span
       >
       <span class="avatar avatar--small">
         @if (store.profile()?.imageUrl; as imageUrl) {

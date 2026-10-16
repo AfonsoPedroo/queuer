@@ -11,7 +11,15 @@ export function mapSpotifyTrack(
   addedAt: string,
   liked: boolean,
 ): Track | null {
-  if (!dto?.id || dto.type !== 'track' || dto.is_local) return null;
+  if (
+    !dto?.id ||
+    !dto.uri ||
+    dto.type !== 'track' ||
+    dto.is_local ||
+    dto.is_playable === false ||
+    dto.restrictions?.reason
+  )
+    return null;
 
   const image = dto.album?.images?.[0];
   const artists = dto.artists
@@ -23,6 +31,7 @@ export function mapSpotifyTrack(
     id: dto.id,
     title: dto.name,
     artist: artists || 'Unknown artist',
+    artistIds: dto.artists.map((artist) => artist.id).filter((id): id is string => Boolean(id)),
     album: dto.album?.name ?? 'Unknown album',
     durationSeconds: Math.max(0, Math.round(dto.duration_ms / 1_000)),
     addedAt,
@@ -36,6 +45,7 @@ export function mapSpotifyTrack(
     uri: dto.uri,
     spotifyUrl: dto.external_urls?.spotify,
     source: 'spotify',
+    ...(dto.album?.release_date ? { releaseDate: dto.album.release_date } : {}),
   };
 }
 

@@ -34,6 +34,8 @@ interface SpotifyPlayer {
 
 interface SpotifyPlayerState {
   readonly paused: boolean;
+  readonly repeat_mode?: 0 | 1 | 2;
+  readonly shuffle?: boolean;
   readonly position: number;
   readonly duration: number;
   readonly track_window: {

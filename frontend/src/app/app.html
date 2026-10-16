@@ -2,16 +2,16 @@
   <header class="titlebar" data-tauri-drag-region (dblclick)="toggleMaximize()">
     <span class="titlebar__name" data-tauri-drag-region>Queuer</span>
     <div class="titlebar__controls">
-      <button type="button" aria-label="Minimize window" (click)="minimizeWindow()">
+      <button type="button" [attr.aria-label]="'Minimizar janela' | t" (click)="minimizeWindow()">
         <span class="window-control window-control--minimize"></span>
       </button>
-      <button type="button" aria-label="Maximize window" (click)="toggleMaximize()">
+      <button type="button" [attr.aria-label]="'Maximizar janela' | t" (click)="toggleMaximize()">
         <span class="window-control window-control--maximize"></span>
       </button>
       <button
         class="titlebar__close"
         type="button"
-        aria-label="Close window"
+        [attr.aria-label]="'Fechar janela' | t"
         (click)="closeWindow()"
       >
         <app-icon name="close" [size]="14" />
@@ -19,7 +19,11 @@
     </div>
   </header>
 
-  <app-topbar class="app-shell__topbar" (openAccount)="accountOpen.set(true)" />
+  <app-topbar
+    class="app-shell__topbar"
+    (openAccount)="accountOpen.set(true)"
+    (openSettings)="settingsOpen.set(true)"
+  />
 
   <section class="app-shell__workspace">
     <app-home-view />
@@ -34,6 +38,10 @@
   <app-auth-panel (closed)="accountOpen.set(false)" (connected)="handleConnected()" />
 }
 
+@if (settingsOpen()) {
+  <app-settings-panel (closed)="settingsOpen.set(false)" />
+}
+
 @if (store.toast(); as toast) {
   <section
     class="toast"
@@ -45,12 +53,16 @@
       ><app-icon [name]="toast.tone === 'error' ? 'warning' : 'check'" [size]="15"
     /></span>
     <span class="toast__copy">
-      <strong>{{ toast.title }}</strong>
+      <strong>{{ toast.title | t }}</strong>
       @if (toast.detail) {
-        <small>{{ toast.detail }}</small>
+        <small>{{ toast.detail | t }}</small>
       }
     </span>
-    <button type="button" aria-label="Dismiss notification" (click)="store.dismissToast()">
+    <button
+      type="button"
+      [attr.aria-label]="'Fechar notificação' | t"
+      (click)="store.dismissToast()"
+    >
       <app-icon name="close" [size]="15" />
     </button>
   </section>
